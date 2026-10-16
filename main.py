@@ -1,3 +1,5 @@
+import fitz
+
 import re
 
 from pathlib import Path
@@ -53,3 +55,27 @@ pdf_path = INPUT_DIR / pdf_name
 pdf_path.write_bytes(pdf_data)
 
 print(f"PDF сохранён: {pdf_path}")
+
+
+OUTPUT_DIR = BASE_DIR / "output"
+OUTPUT_DIR.mkdir(exist_ok=True)
+
+page_texts = []
+
+with fitz.open(pdf_path) as document:
+    print(f"Количество страниц: {len(document)}")
+
+    for page in document:
+        page_text = page.get_text()
+        page_texts.append(page_text)
+
+full_text = "\n".join(page_texts)
+
+if not full_text.strip():
+    raise ValueError("Не удалось извлечь текст из PDF")
+
+text_path = OUTPUT_DIR / "raw_text.txt"
+text_path.write_text(full_text, encoding="utf-8")
+
+print(f"Извлечено символов: {len(full_text)}")
+print(f"Текст сохранён: {text_path}")
