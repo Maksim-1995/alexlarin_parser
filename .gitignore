@@ -1,10 +1,16 @@
+# Окружение и кэш Python
 .venv/
 __pycache__/
 *.py[cod]
-.idea/
-.vscode/
-.env
-questions.json
+.pytest_cache/
 
-check_*.py
-!check_excel.py
+# Входные файлы
+!/input/
+/input/*
+!/input/.gitkeep
+!/input/*_answers.json
+
+# Результаты обработки
+!/output/
+/output/*
+!/output/.gitkeep
