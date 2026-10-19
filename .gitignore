@@ -1,8 +1,14 @@
 # Окружение и кэш Python
 .venv/
+venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.idea/
+.vscode/
+.env
+.env.*
+!.env.example
 
 # Входные файлы
 !/input/
@@ -15,3 +21,4 @@ __pycache__/
 /output/*
 !/output/.gitkeep
 /*_result.zip
+*.bak

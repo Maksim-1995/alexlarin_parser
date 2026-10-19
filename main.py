@@ -4,8 +4,9 @@
 В output/<variant_id>/ сохраняются только tasks.xlsx и images/.
 ZIP создаётся рядом с main.py.
 
-Это исправление состава выгрузки. Условия пока извлекаются через PyMuPDF;
-распознавание математических формул через Gemini ещё не подключено.
+PyMuPDF находит номера заданий и встроенные рисунки.
+Gemini распознаёт условия по изображениям заданий с разрешением 300 dpi.
+Перед записью в Excel LaTeX преобразуется в читаемый текст Unicode.
 """
 
 import argparse
@@ -14,7 +15,6 @@ import re
 from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import unquote, urljoin, urlsplit
-from recognizer import MODEL, recognize_conditions
 
 import jsbeautifier
 import pymupdf
@@ -22,7 +22,9 @@ from jsbeautifier.unpackers import packer
 
 from downloader import download_bytes
 from exporter import create_zip, write_excel
-from parsers import TASK_RE, parse_js_answers, parse_tasks
+from math_text import condition_to_text
+from parsers import parse_js_answers, parse_tasks
+from recognizer import DPI, METHOD, MODEL, get_task_positions, recognize_conditions
 
 
 DEFAULT_PAGE_URL = "https://alexlarin.net/ege/2026/trvar542.html"
@@ -57,27 +59,6 @@ def parse_metadata(text, source_url, export_date):
         "source_url": source_url,
         "date_kind": "Дата формирования выгрузки",
     }
-
-
-def get_task_positions(page):
-    """Найти номера заданий в начале строк и их координаты."""
-    positions = []
-
-    for word_data in page.get_text("words"):
-        x0, y0, x1, y1, word, block_num, line_num, word_num = word_data
-
-        if word_num != 0:
-            continue
-
-        match = TASK_RE.fullmatch(word)
-        if match is not None:
-            positions.append({
-                "task_num": int(match.group(1)),
-                "x": x0,
-                "y": y0,
-            })
-
-    return positions
 
 
 def find_image_task(positions, center_x, center_y, middle_x):
@@ -246,12 +227,16 @@ def main(page_url):
 
     text_path = INPUT_DIR / f"{pdf_path.stem}_raw_text.txt"
     text_path.write_text(full_text, encoding="utf-8")
-    tasks = parse_tasks(full_text)
-
     conditions = recognize_conditions(pdf_path)
 
+    # Регулярка проверяет нумерацию. Текст условий берём из OCR.
+    tasks = parse_tasks(full_text)
     for task in tasks:
-        task["condition"] = conditions[task["task_num"]]
+        number = task["task_num"]
+        try:
+            task["condition"] = condition_to_text(conditions[number])
+        except ValueError as error:
+            raise ValueError(f"Задание {number}: {error}") from error
 
     print("\nЗадание 2 после распознавания:")
     print(tasks[1]["condition"])
@@ -328,9 +313,15 @@ def main(page_url):
     metadata = parse_metadata(full_text, page_url, date.today())
     metadata["answers_13_19_method"] = extra_data["method"]
     metadata["answers_13_19_source"] = extra_data["source_url"]
-    metadata["conditions_method"] = "gemini_pdf_transcription"
+    metadata["conditions_method"] = METHOD
     metadata["conditions_model"] = MODEL
-    metadata["conditions_format"] = "LaTeX"
+    metadata["conditions_dpi"] = DPI
+    metadata["conditions_format"] = "Unicode, линейная математическая запись"
+    metadata["conditions_cache_format"] = "LaTeX"
+    metadata["formula_notation"] = (
+        "a⃗ — вектор; √(...) — корень; x^(...) — степень; "
+        "log[основание](аргумент) — логарифм"
+    )
     metadata["conditions_source"] = pdf_url
 
     images_dir = prepare_output_dir(output_dir)
@@ -345,7 +336,7 @@ def main(page_url):
     file_count = create_zip(excel_path, images_dir, archive_path)
     print(f"Архив сохранён вне output: {archive_path}")
     print(f"Файлов в архиве: {file_count}")
-    print("Условия получены через Gemini. Требуется сверка с PDF.")
+    print("Условия распознаны по изображениям через Gemini. Требуется сверка с PDF.")
 
 
 if __name__ == "__main__":
