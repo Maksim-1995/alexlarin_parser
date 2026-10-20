@@ -1,12 +1,12 @@
 """Собирает вариант alexlarin.net в Excel и сохраняет рисунки заданий.
 
 Исходники и промежуточные файлы находятся в input/.
-В output/<variant_id>/ сохраняются только tasks.xlsx и images/.
+В output/<variant_id>/ сохраняются только tasks.xlsx и рисунки заданий.
 ZIP создаётся рядом с main.py.
 
 PyMuPDF находит номера заданий и встроенные рисунки.
 Gemini распознаёт условия по изображениям заданий с разрешением 300 dpi.
-Перед записью в Excel LaTeX преобразуется в читаемый текст Unicode.
+Перед записью в Excel обозначения оформляются в LaTeX регулярными выражениями.
 """
 
 import argparse
@@ -22,7 +22,7 @@ from jsbeautifier.unpackers import packer
 
 from downloader import download_bytes
 from exporter import create_zip, write_excel
-from math_text import condition_to_text
+from latex_format import normalize_condition
 from parsers import parse_js_answers, parse_tasks
 from recognizer import DPI, METHOD, MODEL, get_task_positions, recognize_conditions
 
@@ -91,9 +91,8 @@ def prepare_output_dir(output_dir):
         output_dir.rename(backup_dir)
         print(f"Предыдущая выгрузка сохранена: {backup_dir}")
 
-    images_dir = output_dir / "images"
-    images_dir.mkdir(parents=True, exist_ok=True)
-    return images_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir
 
 
 def extract_task_images(pdf_path, tasks, images_dir):
@@ -179,10 +178,16 @@ def validate_tasks(tasks, images_dir):
             used_images.add(image_name)
 
     saved_images = {
-        path.name for path in images_dir.iterdir() if path.is_file()
+        path.name
+        for path in images_dir.iterdir()
+        if path.is_file() and path.name != "tasks.xlsx"
     }
+
     if saved_images != used_images:
-        raise ValueError("Состав папки images не совпадает с именами в заданиях")
+        raise ValueError(
+            "Состав папки результата не совпадает "
+            "с именами рисунков в заданиях"
+        )
 
     print("Структура проверена: 19 заданий, ответы и ссылки на рисунки.")
 
@@ -234,7 +239,7 @@ def main(page_url):
     for task in tasks:
         number = task["task_num"]
         try:
-            task["condition"] = condition_to_text(conditions[number])
+            task["condition"] = normalize_condition(conditions[number])
         except ValueError as error:
             raise ValueError(f"Задание {number}: {error}") from error
 
@@ -316,11 +321,11 @@ def main(page_url):
     metadata["conditions_method"] = METHOD
     metadata["conditions_model"] = MODEL
     metadata["conditions_dpi"] = DPI
-    metadata["conditions_format"] = "Unicode, линейная математическая запись"
+    metadata["conditions_format"] = "LaTeX для отображения через MathJax"
     metadata["conditions_cache_format"] = "LaTeX"
     metadata["formula_notation"] = (
-        "a⃗ — вектор; √(...) — корень; x^(...) — степень; "
-        "log[основание](аргумент) — логарифм"
+        "$...$ — формула внутри текста; "
+        "$$...$$ — отдельная формула"
     )
     metadata["conditions_source"] = pdf_url
 

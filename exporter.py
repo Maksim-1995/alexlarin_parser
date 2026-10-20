@@ -1,5 +1,6 @@
 """Экспорт заданий в Excel и ZIP-архив с изображениями."""
 
+from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from openpyxl import Workbook
@@ -11,8 +12,9 @@ def write_excel(tasks, metadata, excel_path):
 
     Лист ``Tasks`` содержит поля ``task_num``, ``condition``,
     ``image_name``, ``solution`` и ``answer``. Поле ``solution``
-    остаётся пустым. Лист ``about`` содержит пары ключей и значений
-    метаданных; для поля ``date`` задаётся формат ``yyyy-mm-dd``.
+    остаётся пустым. На листе ``about`` первая строка содержит названия
+    полей метаданных, вторая — их значения. Для поля ``date`` задаётся
+    формат ``yyyy-mm-dd``.
 
     Args:
         tasks: Итерируемая коллекция словарей с полями ``task_num``,
@@ -48,15 +50,14 @@ def write_excel(tasks, metadata, excel_path):
         ])
 
     about_sheet = workbook.create_sheet("about")
-    about_sheet.append(["field", "value"])
+    about_sheet.append(list(metadata.keys()))
+    about_sheet.append(list(metadata.values()))
 
-    for field, value in metadata.items():
-        about_sheet.append([field, value])
-
+    for column, field in enumerate(metadata, start=1):
         if field == "date":
             date_cell = about_sheet.cell(
-                row=about_sheet.max_row,
-                column=2,
+                row=2,
+                column=column,
             )
             date_cell.number_format = "yyyy-mm-dd"
 
@@ -113,21 +114,38 @@ def format_excel(workbook):
     tasks_sheet.auto_filter.ref = tasks_sheet.dimensions
 
     about_sheet = workbook["about"]
-    about_sheet.column_dimensions["A"].width = 30
-    about_sheet.column_dimensions["B"].width = 85
+    about_widths = {
+        "class": 10,
+        "year": 12,
+        "date": 16,
+        "variant_name": 45,
+        "source_url": 70,
+        "answers_13_19_source": 70,
+        "conditions_source": 70,
+        "formula_notation": 70,
+    }
+    for cell in about_sheet[1]:
+        about_sheet.column_dimensions[cell.column_letter].width = (
+            about_widths.get(cell.value, 32)
+        )
+    about_sheet.row_dimensions[2].height = 90
 
 
 def create_zip(excel_path, images_dir, archive_path):
     """Создать ZIP-архив и проверить целостность записанных файлов.
 
-    Книга сохраняется в архиве как ``tasks.xlsx``. Все файлы из
-    ``images_dir`` добавляются в каталог ``images`` в порядке имён;
-    вложенные каталоги не обходятся. Существующий архив
-    перезаписывается.
+    Книга сохраняется в архиве как ``tasks.xlsx``. Рисунки добавляются
+    рядом с ней, без вложенной папки. ``images_dir`` может совпадать
+    с папкой Excel: книга повторно не добавляется. Сам архив также
+    исключается из списка исходных файлов. Вложенные каталоги
+    не обходятся. Существующий архив перезаписывается.
+
+    Каталог изображений должен содержать только итоговые рисунки
+    и, при совпадении с папкой результата, книгу Excel.
 
     Args:
         excel_path: Путь к книге Excel, добавляемой в архив.
-        images_dir: Объект pathlib.Path с каталогом изображений.
+        images_dir: Каталог изображений; теперь это папка результата.
         archive_path: Путь к создаваемому ZIP-архиву.
 
     Returns:
@@ -137,6 +155,11 @@ def create_zip(excel_path, images_dir, archive_path):
         OSError: Не удалось прочитать исходные файлы или записать архив.
         ValueError: Проверка целостности обнаружила повреждённый файл.
     """
+    excel_path = Path(excel_path)
+    images_dir = Path(images_dir)
+    archive_path = Path(archive_path)
+    excluded_paths = {excel_path.resolve(), archive_path.resolve()}
+
     with ZipFile(
         archive_path,
         mode="w",
@@ -145,10 +168,10 @@ def create_zip(excel_path, images_dir, archive_path):
         archive.write(excel_path, arcname="tasks.xlsx")
 
         for image_path in sorted(images_dir.iterdir()):
-            if image_path.is_file():
+            if image_path.is_file() and image_path.resolve() not in excluded_paths:
                 archive.write(
                     image_path,
-                    arcname=f"images/{image_path.name}",
+                    arcname=image_path.name,
                 )
 
     # Проверяем целостность записанных файлов.
