@@ -22,6 +22,7 @@ from jsbeautifier.unpackers import packer
 
 from downloader import download_bytes
 from exporter import create_zip, write_excel
+from export_metadata import prepare_about_metadata
 from latex_format import normalize_condition
 from parsers import parse_js_answers, parse_tasks
 from recognizer import DPI, METHOD, MODEL, get_task_positions, recognize_conditions
@@ -334,7 +335,7 @@ def main(page_url):
     validate_tasks(tasks, images_dir)
 
     excel_path = output_dir / "tasks.xlsx"
-    write_excel(tasks, metadata, excel_path)
+    write_excel(tasks, prepare_about_metadata(metadata), excel_path)
     print(f"Excel сохранён: {excel_path}")
 
     archive_path = BASE_DIR / f"{pdf_path.stem}_result.zip"
