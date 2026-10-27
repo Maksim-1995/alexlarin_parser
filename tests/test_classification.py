@@ -23,9 +23,9 @@ class ClassificationTests(unittest.TestCase):
             {"task_num": n, "exams_id": 180, "topics_id": 526}
             for n in range(1, 20)
         ]
-        self.exam_label = "E180 | Вектор > Векторы и операции с ними"
+        self.exam_label = "E | Вектор > Векторы и операции с ними"
         self.topic_label = (
-            "T526 | Геометрия > Планиметрия > Векторы > "
+            "T | Геометрия > Планиметрия > Векторы > "
             "Умножение вектора на число. Скалярное произведение векторов"
         )
         self.response_items = [

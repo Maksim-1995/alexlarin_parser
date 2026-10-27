@@ -8,7 +8,8 @@ from pathlib import Path
 from functools import partial
 
 
-MODEL = "gemini-3.5-flash-lite"
+MODEL = "gemini-3.6-flash"
+THINKING_LEVEL = "medium"
 TASK_NUMBERS = set(range(1, 20))
 PROMPT = """Классифицируй все 19 математических заданий из tasks.
 Для каждого задания выбери одну категорию из exams и одну тему из topics.
@@ -230,7 +231,10 @@ def request_gemini(prompt, *, model, schema):
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_json_schema=schema,
-                max_output_tokens=8192,
+                max_output_tokens=16384,
+                thinking_config=types.ThinkingConfig(
+                    thinking_level=THINKING_LEVEL,
+                ),
             ),
         )
     return response.text or ""
@@ -266,7 +270,13 @@ def classify_tasks(tasks, exams_path, topics_path, cache_path, *, model=MODEL, r
         "exams": list(exam_choices),
         "topics": list(topic_choices),
     }
-    identity = {"version": 1, "model": model, "prompt": PROMPT, "input": payload}
+    identity = {
+        "version": 1,
+        "model": model,
+        "thinking_level": THINKING_LEVEL,
+        "prompt": PROMPT,
+        "input": payload,
+    }
     serialized = json.dumps(identity, ensure_ascii=False, sort_keys=True)
     fingerprint = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
     cache_path = Path(cache_path)
@@ -311,6 +321,7 @@ def classify_tasks(tasks, exams_path, topics_path, cache_path, *, model=MODEL, r
         cached = {
             "fingerprint": fingerprint,
             "model": model,
+            "thinking_level": THINKING_LEVEL,
             "requests_used": attempt,
             "tasks": items,
             "choices": selected,
