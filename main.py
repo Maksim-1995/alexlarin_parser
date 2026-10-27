@@ -20,12 +20,14 @@ import jsbeautifier
 import pymupdf
 from jsbeautifier.unpackers import packer
 
+from classification import classify_tasks
 from downloader import download_bytes
 from exporter import create_zip, write_excel
 from export_metadata import prepare_about_metadata
 from latex_format import normalize_condition
 from parsers import parse_js_answers, parse_tasks
 from recognizer import DPI, METHOD, MODEL, get_task_positions, recognize_conditions
+from task_html import add_subtask_breaks
 
 
 DEFAULT_PAGE_URL = "https://alexlarin.net/ege/2026/trvar542.html"
@@ -183,7 +185,6 @@ def validate_tasks(tasks, images_dir):
         for path in images_dir.iterdir()
         if path.is_file() and path.name != "tasks.xlsx"
     }
-
     if saved_images != used_images:
         raise ValueError(
             "Состав папки результата не совпадает "
@@ -216,13 +217,18 @@ def main(page_url):
         raise ValueError("На странице не найдена ссылка на PDF")
 
     pdf_url = urljoin(page_url, pdf_match.group(1))
-    pdf_data = download_bytes(pdf_url)
-    if not pdf_data.startswith(b"%PDF-"):
-        raise ValueError("Скачанный файл не похож на PDF")
-
     pdf_path = INPUT_DIR / Path(unquote(urlsplit(pdf_url).path)).name
-    pdf_path.write_bytes(pdf_data)
-    print(f"PDF сохранён: {pdf_path}")
+
+    if pdf_path.is_file():
+        print(f"Используем сохранённый PDF: {pdf_path}")
+    else:
+        pdf_data = download_bytes(pdf_url)
+
+        if not pdf_data.startswith(b"%PDF-"):
+            raise ValueError("Скачанный файл не похож на PDF")
+
+        pdf_path.write_bytes(pdf_data)
+        print(f"PDF сохранён: {pdf_path}")
 
     with pymupdf.open(pdf_path) as document:
         print(f"Количество страниц: {len(document)}")
@@ -329,6 +335,18 @@ def main(page_url):
         "$$...$$ — отдельная формула"
     )
     metadata["conditions_source"] = pdf_url
+
+    classifications = classify_tasks(
+        tasks,
+        BASE_DIR / "data" / "exams.csv",
+        BASE_DIR / "data" / "topics.csv",
+        INPUT_DIR / f"{pdf_path.stem}_classification.json",
+    )
+    for task in tasks:
+        task.update(classifications[task["task_num"]])
+        task["condition"] = add_subtask_breaks(task["condition"])
+        task["answer"] = add_subtask_breaks(task["answer"])
+    print(f"Классификация получена для {len(classifications)} заданий.")
 
     images_dir = prepare_output_dir(output_dir)
     extract_task_images(pdf_path, tasks, images_dir)

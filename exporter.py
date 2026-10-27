@@ -11,14 +11,15 @@ def write_excel(tasks, metadata, excel_path):
     """Сохранить задания и метаданные в книгу Excel.
 
     Лист ``Tasks`` содержит поля ``task_num``, ``condition``,
-    ``image_name``, ``solution`` и ``answer``. Поле ``solution``
+    ``image_name``, ``solution``, ``answer``, ``exams_id`` и ``topics_id``.
+    Поле ``solution``
     остаётся пустым. На листе ``about`` первая строка содержит названия
     полей метаданных, вторая — их значения. Для поля ``date`` задаётся
     формат ``yyyy-mm-dd``.
 
     Args:
         tasks: Итерируемая коллекция словарей с полями ``task_num``,
-            ``condition``, ``image_name`` и ``answer``.
+            ``condition``, ``image_name``, ``answer``, ``exams_id`` и ``topics_id``.
         metadata: Словарь метаданных для листа ``about``.
         excel_path: Путь к сохраняемой книге Excel.
 
@@ -38,6 +39,8 @@ def write_excel(tasks, metadata, excel_path):
         "image_name",
         "solution",
         "answer",
+        "exams_id",
+        "topics_id",
     ])
 
     for task in tasks:
@@ -47,6 +50,8 @@ def write_excel(tasks, metadata, excel_path):
             task["image_name"],
             "",  # Решения пока оставляем пустыми.
             task["answer"],
+            task["exams_id"],
+            task["topics_id"],
         ])
 
     about_sheet = workbook.create_sheet("about")
@@ -106,6 +111,8 @@ def format_excel(workbook):
         "C": 30,  # image_name
         "D": 30,  # solution
         "E": 50,  # answer
+        "F": 14,  # exams_id
+        "G": 14,  # topics_id
     }
 
     for column, width in column_widths.items():
@@ -119,6 +126,7 @@ def format_excel(workbook):
         "year": 12,
         "date": 16,
         "variant_name": 45,
+        "title": 45,
         "source_url": 70,
         "answers_13_19_source": 70,
         "conditions_source": 70,

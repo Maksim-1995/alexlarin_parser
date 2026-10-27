@@ -31,6 +31,8 @@ class ExporterTests(unittest.TestCase):
                 "condition": r"Найдите длину $AA_1$ и значение $\sqrt{43}$.",
                 "image_name": self.image_names.get(number, ""),
                 "answer": "0,9940" if number == 5 else "12",
+                "exams_id": 180,
+                "topics_id": 526,
             }
             for number in range(1, 20)
         ]
@@ -80,7 +82,7 @@ class ExporterTests(unittest.TestCase):
         tasks = workbook["Tasks"]
         self.assertEqual(
             [cell.value for cell in tasks[1]],
-            ["task_num", "condition", "image_name", "solution", "answer"],
+            ["task_num", "condition", "image_name", "solution", "answer", "exams_id", "topics_id"],
         )
         self.assertEqual(tasks.max_row, 20)
         for row, task in zip(tasks.iter_rows(min_row=2), self.tasks):
@@ -90,10 +92,14 @@ class ExporterTests(unittest.TestCase):
             self.assertIsNone(row[3].value)
             self.assertEqual(row[4].value, task["answer"])
             self.assertEqual(row[4].data_type, "s")
+            self.assertEqual(row[5].value, task["exams_id"])
+            self.assertEqual(row[6].value, task["topics_id"])
+            self.assertEqual(row[5].data_type, "n")
+            self.assertEqual(row[6].data_type, "n")
         self.assertEqual(tasks["E6"].value, "0,9940")
         self.assertTrue(tasks["B2"].alignment.wrap_text)
         self.assertEqual(tasks.freeze_panes, "A2")
-        self.assertEqual(tasks.auto_filter.ref, "A1:E20")
+        self.assertEqual(tasks.auto_filter.ref, "A1:G20")
 
     def test_zip_has_five_files_at_one_level(self):
         self._write_result()

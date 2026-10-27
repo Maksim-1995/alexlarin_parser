@@ -75,7 +75,7 @@
 <body>
 
   <h2>Проверка парсинга MathJax из Excel</h2>
-  <p>Скопируйте ячейки из Excel (Ctrl+C) и вставьте в поле ниже (Ctrl+V):</p>
+  <p>Скопируйте Tasks!A1:G20 из Excel (Ctrl+C) и вставьте ниже (Ctrl+V). Для загрузки MathJax нужен доступ в интернет.</p>
   
   <textarea id="excelInput" placeholder="Вставьте скопированные из Excel строки сюда..."></textarea>
   <br>
@@ -86,10 +86,27 @@
   <script>
     // Обработка клика и авто-вставки
     document.getElementById('excelInput').addEventListener('input', renderExcelData);
+    document.getElementById('MathJax-script').addEventListener('load', renderExcelData);
+
+    function escapeHtml(value) {
+      const symbols = {
+        '&': '&amp;', '<': '&lt;', '>': '&gt;',
+        '"': '&quot;', "'": '&#39;'
+      };
+      return String(value).replace(/[&<>"']/g, char => symbols[char]);
+    }
+
+    function renderTaskText(value) {
+      // Формулы и знаки сравнения остаются текстом. Разрешён только перенос <br>.
+      return escapeHtml(value).replace(/&lt;br\s*\/?&gt;/gi, '<br>');
+    }
 
     function renderExcelData() {
       const rawText = document.getElementById('excelInput').value;
       const outputDiv = document.getElementById('output');
+      if (window.MathJax && MathJax.typesetClear) {
+        MathJax.typesetClear([outputDiv]);
+      }
       outputDiv.innerHTML = '';
 
       if (!rawText.trim()) return;
@@ -111,13 +128,13 @@
         const card = document.createElement('div');
         card.className = 'task-card';
 
-        let html = `<div class="task-header">Задача № ${taskNum}</div>`;
-        html += `<div class="task-body">${condition}</div>`;
+        let html = `<div class="task-header">Задача № ${escapeHtml(taskNum)}</div>`;
+        html += `<div class="task-body">${renderTaskText(condition)}</div>`;
         
         if (imageName || answer) {
           html += `<div class="task-meta">`;
-          if (imageName) html += `<div>🖼️ <b>Картинка:</b> ${imageName}</div>`;
-          if (answer) html += `<div>✅ <b>Ответ:</b> ${answer}</div>`;
+          if (imageName) html += `<div>🖼️ <b>Картинка:</b> ${escapeHtml(imageName)}</div>`;
+          if (answer) html += `<div>✅ <b>Ответ:</b> ${renderTaskText(answer)}</div>`;
           html += `</div>`;
         }
 
