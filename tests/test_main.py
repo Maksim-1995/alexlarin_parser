@@ -1,0 +1,187 @@
+"""Сборка реального варианта из input/; классификация в тестах подменяется.
+
+Результаты создаются исключительно во временной папке pytest. Если сохранённые
+исходники не предоставлены вместе с клоном, интеграционные проверки пропускаются.
+"""
+
+import json
+import shutil
+import socket
+from pathlib import Path
+from zipfile import ZipFile
+
+import pytest
+from openpyxl import load_workbook
+
+import classification
+import downloader
+import main
+import recognizer
+from export_metadata import ABOUT_FIELDS
+
+
+PROJECT = Path(__file__).resolve().parents[1]
+SOURCE_NAMES = (
+    "trvar542.html", "trvar542.pdf", "trvar542.js", "trvar542.png",
+    "trvar542_answers.json", "trvar542_conditions_gemini.json",
+)
+IMAGE_NAMES = {1: "image_82.jpeg", 3: "image_83.jpeg", 8: "image_198.png", 11: "image_200.png"}
+TOPIC_LABEL = (
+    "T | Геометрия > Планиметрия > Векторы > "
+    "Умножение вектора на число. Скалярное произведение векторов"
+)
+NEW_TOPIC = "Первообразная и определённый интеграл"
+
+
+@pytest.fixture
+def local_project(tmp_path, monkeypatch):
+    missing = [name for name in SOURCE_NAMES if not (PROJECT / "input" / name).is_file()]
+    if missing:
+        pytest.skip("Для проверки нужны сохранённые реальные исходники: " + ", ".join(missing))
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    for name in SOURCE_NAMES:
+        shutil.copyfile(PROJECT / "input" / name, input_dir / name)
+    shutil.copytree(PROJECT / "data", tmp_path / "data")
+    monkeypatch.setattr(main, "BASE_DIR", tmp_path)
+    monkeypatch.setattr(main, "INPUT_DIR", input_dir)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    def network_forbidden(*args, **kwargs):
+        pytest.fail("Сеть при локальной сборке запрещена")
+
+    monkeypatch.setattr(socket.socket, "connect", network_forbidden)
+    monkeypatch.setattr(downloader, "download_bytes", network_forbidden)
+    monkeypatch.setattr(recognizer.genai, "Client", network_forbidden)
+    return tmp_path
+
+
+def fake_classification(prompt, *, model, schema):
+    """Данные для проверки контракта, не математическая классификация варианта."""
+    payload = json.loads(prompt.split("Данные:\n", 1)[1])
+    assert len(payload["tasks"]) == 19
+    return json.dumps([
+        {
+            "task_num": number,
+            "exam_choice": "E | Вектор",
+            "topic_kind": "new" if number == 8 else "existing",
+            "topic_choice": NEW_TOPIC if number == 8 else TOPIC_LABEL,
+        }
+        for number in range(1, 20)
+    ], ensure_ascii=False)
+
+
+def test_real_sources_and_both_caches_rebuild_with_network_blocked(local_project, monkeypatch):
+    calls = []
+
+    def classify_once(*args, **kwargs):
+        calls.append(args)
+        return fake_classification(*args, **kwargs)
+
+    original_sources = {name: (local_project / "input" / name).read_bytes() for name in SOURCE_NAMES}
+    monkeypatch.setattr(classification, "request_gemini", classify_once)
+    main.main(main.DEFAULT_PAGE_URL)
+    assert len(calls) == 1
+
+    def gemini_forbidden(*args, **kwargs):
+        pytest.fail("Gemini при подходящем кэше запрещён")
+
+    monkeypatch.setattr(classification, "request_gemini", gemini_forbidden)
+    main.main(main.DEFAULT_PAGE_URL)
+    for name, contents in original_sources.items():
+        assert (local_project / "input" / name).read_bytes() == contents
+
+    output = local_project / "output" / "trvar542"
+    expected = {"tasks.xlsx", *IMAGE_NAMES.values()}
+    assert {path.name for path in output.iterdir()} == expected
+    assert not list(output.glob("*ocr*"))
+    with ZipFile(local_project / "trvar542_result.zip") as archive:
+        assert set(archive.namelist()) == expected
+        assert len(archive.namelist()) == 5
+        assert archive.testzip() is None
+        for name in expected:
+            assert archive.read(name) == (output / name).read_bytes()
+
+    workbook = load_workbook(output / "tasks.xlsx")
+    try:
+        sheet = workbook["Tasks"]
+        assert list(next(sheet.values)) == ["task_num", "condition", "image_name", "solution", "answer", "exams_id", "topics_id"]
+        assert sheet.max_row == 20
+        assert [sheet.cell(row, 1).value for row in range(2, 21)] == list(range(1, 20))
+        assert {row[0].value: row[2].value for row in sheet.iter_rows(min_row=2) if row[2].value} == IMAGE_NAMES
+        assert sheet["E6"].value == "0,9940"
+        assert sheet["E6"].data_type == "s"
+        assert sheet["G9"].value == NEW_TOPIC
+        assert sheet["G9"].data_type == "s"
+        assert sheet["G3"].value == 526
+        assert sheet["G3"].data_type == "n"
+        assert all(row[3].value is None for row in sheet.iter_rows(min_row=2))
+        assert all(type(row[5].value) is int for row in sheet.iter_rows(min_row=2))
+        assert "<br>Б)" in sheet["E14"].value
+        assert "\\frac" in sheet["E14"].value
+        assert "<br>Б)" in sheet["B14"].value
+        assert "<br>Б)" in sheet["E20"].value
+        about = workbook["about"]
+        assert list(next(about.values)) == list(ABOUT_FIELDS)
+        assert about.max_column == 11 and about.max_row == 2
+        fields = dict(zip((cell.value for cell in about[1]), (cell.value for cell in about[2])))
+        assert fields["source_url"] == main.DEFAULT_PAGE_URL
+        assert fields["exam_id"] is None
+    finally:
+        workbook.close()
+
+
+def test_failed_classification_keeps_previous_successful_files(local_project, monkeypatch):
+    monkeypatch.setattr(classification, "request_gemini", fake_classification)
+    main.main(main.DEFAULT_PAGE_URL)
+    output = local_project / "output" / "trvar542"
+    before = {path.name: path.read_bytes() for path in output.iterdir()}
+    archive = local_project / "trvar542_result.zip"
+    original_archive = archive.read_bytes()
+    (local_project / "input" / "trvar542_classification.json").unlink()
+
+    def fail_classification(*args, **kwargs):
+        raise RuntimeError("Gemini: сеть или API недоступны")
+
+    monkeypatch.setattr(classification, "request_gemini", fail_classification)
+    with pytest.raises(RuntimeError, match="Gemini"):
+        main.main(main.DEFAULT_PAGE_URL)
+    assert {path.name: path.read_bytes() for path in output.iterdir()} == before
+    assert archive.read_bytes() == original_archive
+    assert not (local_project / "input" / "previous_output").exists()
+
+
+@pytest.mark.parametrize("encoding", ["utf-8", "windows-1251"])
+def test_html_uses_original_url_and_exact_variant(encoding):
+    html = '''<html><title>Тренировочный вариант №542 ЕГЭ - 2026</title>
+    <a href="other.pdf">Other</a><a href="trvar542.pdf">PDF</a>
+    <script src="%74rvar542.js"></script><img src="trvar542.png"></html>'''
+    assert main.parse_source_page(html.encode(encoding), main.DEFAULT_PAGE_URL) == {
+        extension: f"https://alexlarin.net/ege/2026/trvar542.{extension}"
+        for extension in ("pdf", "js", "png")
+    }
+    with pytest.raises(ValueError, match="нужного тренировочного варианта"):
+        main.parse_source_page(html.replace("№542", "№541").encode(encoding), main.DEFAULT_PAGE_URL)
+    with pytest.raises(ValueError, match="Год"):
+        main.parse_source_page(html.replace("2026", "2025").encode(encoding), main.DEFAULT_PAGE_URL)
+    with pytest.raises(ValueError, match="trvar542.pdf"):
+        main.parse_source_page(html.replace("trvar542.pdf", "trvar541.pdf").encode(encoding), main.DEFAULT_PAGE_URL)
+
+
+@pytest.mark.parametrize("reader", [main.read_js_source, main.validate_answer_image])
+def test_error_page_cannot_replace_js_or_image(reader):
+    with pytest.raises(ValueError):
+        reader(b"<html>503 Service Unavailable</html>")
+
+
+def test_corrupt_packed_js_is_rejected_with_clear_error():
+    with pytest.raises(ValueError, match="JavaScript"):
+        main.read_js_source(b"eval(function(p,a,c,k,e,r){broken")
+
+
+def test_real_pdf_with_wrong_number_or_year_is_rejected(local_project):
+    data = (local_project / "input" / "trvar542.pdf").read_bytes()
+    with pytest.raises(ValueError, match="другому варианту"):
+        main.read_pdf_source(data, "https://alexlarin.net/ege/2026/trvar541.html")
+    with pytest.raises(ValueError, match="Год"):
+        main.read_pdf_source(data, "https://alexlarin.net/ege/2025/trvar542.html")

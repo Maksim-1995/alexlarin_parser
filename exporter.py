@@ -12,9 +12,10 @@ def write_excel(tasks, metadata, excel_path):
 
     Лист ``Tasks`` содержит поля ``task_num``, ``condition``,
     ``image_name``, ``solution``, ``answer``, ``exams_id`` и ``topics_id``.
-    Поле ``solution``
-    остаётся пустым. На листе ``about`` первая строка содержит названия
-    полей метаданных, вторая — их значения. Для поля ``date`` задаётся
+    В ``topics_id`` сохраняется числовой ID существующей темы или текст
+    новой темы. Строки записываются как текст, даже если начинаются с ``=``.
+    Поле ``solution`` остаётся пустым. На листе ``about`` первая строка
+    содержит названия полей метаданных, вторая — их значения. Для ``date`` задаётся
     формат ``yyyy-mm-dd``.
 
     Args:
@@ -53,6 +54,11 @@ def write_excel(tasks, metadata, excel_path):
             task["exams_id"],
             task["topics_id"],
         ])
+        # openpyxl автоматически считает строку с «=» формулой.
+        # Названия тем, ответы и условия должны оставаться исходным текстом.
+        for cell in tasks_sheet[tasks_sheet.max_row]:
+            if isinstance(cell.value, str):
+                cell.data_type = "s"
 
     about_sheet = workbook.create_sheet("about")
     about_sheet.append(list(metadata.keys()))

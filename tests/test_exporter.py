@@ -8,6 +8,7 @@ from zipfile import ZipFile
 
 from openpyxl import load_workbook
 
+from export_metadata import ABOUT_FIELDS, prepare_about_metadata
 from exporter import create_zip, write_excel
 
 
@@ -31,7 +32,7 @@ class ExporterTests(unittest.TestCase):
                 "condition": r"Найдите длину $AA_1$ и значение $\sqrt{43}$.",
                 "image_name": self.image_names.get(number, ""),
                 "answer": "0,9940" if number == 5 else "12",
-                "exams_id": 180,
+                "exams_id": 179,
                 "topics_id": 526,
             }
             for number in range(1, 20)
@@ -75,6 +76,20 @@ class ExporterTests(unittest.TestCase):
         self.assertEqual(about["E2"].value, self.metadata["source_url"])
         self.assertEqual(about["F2"].value, self.metadata["conditions_format"])
 
+    def test_prepared_about_preserves_eleven_fields_and_source(self):
+        metadata = prepare_about_metadata(self.metadata)
+        write_excel(self.tasks, metadata, self.excel_path)
+        workbook = load_workbook(self.excel_path)
+        self.addCleanup(workbook.close)
+        about = workbook["about"]
+        self.assertEqual([cell.value for cell in about[1]], list(ABOUT_FIELDS))
+        self.assertEqual(about.max_column, 11)
+        self.assertEqual(about.max_row, 2)
+        self.assertEqual(about["F2"].value, self.metadata["variant_name"])
+        self.assertEqual(about["H2"].value, "alexlarin.net")
+        self.assertEqual(about["J2"].value, self.metadata["source_url"])
+        self.assertIsNone(about["E2"].value)
+
     def test_tasks_preserve_latex_and_text_answers(self):
         write_excel(self.tasks, self.metadata, self.excel_path)
         workbook = load_workbook(self.excel_path)
@@ -100,6 +115,46 @@ class ExporterTests(unittest.TestCase):
         self.assertTrue(tasks["B2"].alignment.wrap_text)
         self.assertEqual(tasks.freeze_panes, "A2")
         self.assertEqual(tasks.auto_filter.ref, "A1:G20")
+
+    def test_mixed_topic_types_stay_in_seven_columns(self):
+        self.tasks[7]["topics_id"] = "Первообразная и определённый интеграл"
+        self.tasks[12]["condition"] = r"А) Найдите $x$.<br>Б) Найдите $\sqrt{x}$."
+        self.tasks[12]["answer"] = r"А) $2$.<br>Б) $\sqrt{2}$."
+        write_excel(self.tasks, prepare_about_metadata(self.metadata), self.excel_path)
+        workbook = load_workbook(self.excel_path)
+        self.addCleanup(workbook.close)
+        tasks = workbook["Tasks"]
+
+        self.assertEqual(tasks.max_column, 7)
+        self.assertEqual(tasks.max_row, 20)
+        self.assertEqual([row[0].value for row in tasks.iter_rows(min_row=2)], list(range(1, 20)))
+        for row, task in zip(tasks.iter_rows(min_row=2), self.tasks):
+            self.assertEqual(row[2].value or "", self.image_names.get(task["task_num"], ""))
+            self.assertIsNone(row[3].value)
+            self.assertEqual(row[4].value, task["answer"])
+            self.assertEqual(row[4].data_type, "s")
+            self.assertEqual(row[5].value, 179)
+            self.assertEqual(row[5].data_type, "n")
+            self.assertEqual(row[6].value, task["topics_id"])
+            self.assertEqual(row[6].data_type, "s" if task["task_num"] == 8 else "n")
+        self.assertEqual(tasks["B14"].value, self.tasks[12]["condition"])
+        self.assertEqual(tasks["E6"].value, "0,9940")
+
+    def test_text_starting_with_equals_is_not_an_excel_formula(self):
+        self.tasks[7]["topics_id"] = "=Первообразная и определённый интеграл"
+        self.tasks[0]["answer"] = "=2+2"
+        write_excel(self.tasks, self.metadata, self.excel_path)
+        for data_only in (False, True):
+            with self.subTest(data_only=data_only):
+                workbook = load_workbook(self.excel_path, data_only=data_only)
+                try:
+                    tasks = workbook["Tasks"]
+                    self.assertEqual(tasks["G9"].value, self.tasks[7]["topics_id"])
+                    self.assertEqual(tasks["G9"].data_type, "s")
+                    self.assertEqual(tasks["E2"].value, "=2+2")
+                    self.assertEqual(tasks["E2"].data_type, "s")
+                finally:
+                    workbook.close()
 
     def test_zip_has_five_files_at_one_level(self):
         self._write_result()
