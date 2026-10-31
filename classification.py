@@ -14,7 +14,7 @@ from tempfile import NamedTemporaryFile
 MODEL = "gemini-3.5-flash-lite"
 THINKING_LEVEL = "medium"
 CACHE_VERSION = 3
-RULES_VERSION = "direct-exams-math-leaves-new-topics-v3"
+RULES_VERSION = "math-exam-leaves-new-topics-v4"
 REQUEST_TIMEOUT_MS = 120_000
 MAX_OUTPUT_TOKENS = 16384
 TASK_NUMBERS = set(range(1, 20))
@@ -29,8 +29,9 @@ topics описывает учебные темы математики.
 Сначала определи основную математическую тему по полному условию,
 затем выбери подходящую категорию каждого справочника по смыслу условия.
 Учитывай все подпункты задания. Одна задача с пунктами А/Б/В — одна запись.
-В exams переданы только категории с непосредственным parent_of_exam = 2.
-Они допустимы, даже если у них есть дети. Выбирай только из этого списка.
+В exams переданы только конечные категории (без детей) среди всех потомков
+ветки «математика профиль» с корнем 2. Прямой родитель может отличаться от 2.
+Выбирай только из этого списка; промежуточные разделы выбирать нельзя.
 В topics переданы только конечные темы (без детей) внутри ветки «Математика».
 Пути сохраняют названия родителей для контекста, но выбирать родителей нельзя.
 В exam_choice скопируй целиком одну строку из exams.
@@ -52,14 +53,15 @@ topics описывает учебные темы математики.
 При выборе геометрической темы учитывай, требуется объём или площадь.
 Для кусочно заданной функции учитывай все её ветви, а не только одну формулу.
 Готовый график функции не означает использование производной:
-для таких заданий рассматривай категорию exams «Графики функций ЕГЭ».
+для таких заданий рассматривай подходящий конечный узел exams
+в ветке «Графики функций ЕГЭ» или другую подходящую категорию из списка.
 Не выбирай тему применения производных, если производные в задаче не используются.
 Скорость изменения величины связана с производной.
 Тема «точки на прямой» относится к геометрическим задачам.
 Категории тригонометрических уравнений подходят для уравнений с тригонометрическими функциями.
 Если по графику производной f'(x) требуется найти разность
 значений исходной функции f(b)-f(a), выбирай в exams
-категорию «Производная и первообразная».
+подходящую конечную категорию в ветке «Производная и первообразная».
 Это задача на восстановление изменения функции по её производной.
 Если в topics нет темы первообразной или интеграла,
 предложи новую тему, например «Первообразная и определённый интеграл».
@@ -161,12 +163,28 @@ def load_catalog(path, *, name_column, parent_column, root_id):
 
 def allowed_categories(rows, prefix):
     """Один отбор используется и для запроса, и для проверки API/кэша."""
-    if prefix == "E":
-        return [row for row in rows if row["parent"] == 2]
-    if prefix == "T":
-        parent_ids = {row["parent"] for row in rows}
-        return [row for row in rows if row["id"] not in parent_ids]
-    raise ValueError(f"Неизвестный справочник: {prefix}")
+    roots = {"E": 2, "T": 1}
+    if prefix not in roots:
+        raise ValueError(f"Неизвестный справочник: {prefix}")
+    root_id = roots[prefix]
+    # Дети определяются по полному CSV, даже если rows уже сокращён.
+    records = getattr(rows, "records", {row["id"]: row for row in rows})
+    parent_ids = {row["parent"] for row in records.values()}
+    selected = []
+    for row in rows:
+        if row["id"] == root_id or row["id"] in parent_ids:
+            continue
+        current = row["parent"]
+        visited = set()
+        # Лист допустим, только если цепочка его родителей доходит до корня.
+        while current not in (0, root_id):
+            if current in visited or current not in records:
+                break
+            visited.add(current)
+            current = records[current]["parent"]
+        if current == root_id:
+            selected.append(row)
+    return selected
 
 
 def build_category_choices(rows, prefix):

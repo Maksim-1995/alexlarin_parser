@@ -4,6 +4,7 @@
 исходники не предоставлены вместе с клоном, интеграционные проверки пропускаются.
 """
 
+import csv
 import json
 import shutil
 import socket
@@ -26,6 +27,7 @@ SOURCE_NAMES = (
     "trvar542_answers.json", "trvar542_conditions_gemini.json",
 )
 IMAGE_NAMES = {1: "image_82.jpeg", 3: "image_83.jpeg", 8: "image_198.png", 11: "image_200.png"}
+EXAM_LABEL = "E | Вектор > Векторы и операции с ними"
 TOPIC_LABEL = (
     "T | Геометрия > Планиметрия > Векторы > "
     "Умножение вектора на число. Скалярное произведение векторов"
@@ -60,10 +62,12 @@ def fake_classification(prompt, *, model, schema):
     """Данные для проверки контракта, не математическая классификация варианта."""
     payload = json.loads(prompt.split("Данные:\n", 1)[1])
     assert len(payload["tasks"]) == 19
+    assert EXAM_LABEL in payload["exams"]
+    assert "E | Вектор" not in payload["exams"]
     return json.dumps([
         {
             "task_num": number,
-            "exam_choice": "E | Вектор",
+            "exam_choice": EXAM_LABEL,
             "topic_kind": "new" if number == 8 else "existing",
             "topic_choice": NEW_TOPIC if number == 8 else TOPIC_LABEL,
         }
@@ -117,6 +121,19 @@ def test_real_sources_and_both_caches_rebuild_with_network_blocked(local_project
         assert sheet["G3"].data_type == "n"
         assert all(row[3].value is None for row in sheet.iter_rows(min_row=2))
         assert all(type(row[5].value) is int for row in sheet.iter_rows(min_row=2))
+        # Проверяем конечный Excel по полному исходному справочнику,
+        # независимо от функции отбора кандидатов классификатора.
+        with (local_project / "data" / "exams.csv").open(encoding="utf-8-sig") as source:
+            exams = {int(record["id"]): int(record["parent_of_exam"]) for record in csv.DictReader(source)}
+        parents = set(exams.values())
+        for row in sheet.iter_rows(min_row=2):
+            exam_id = row[5].value
+            assert exam_id == 180
+            assert exam_id not in parents
+            current = exams[exam_id]
+            while current and current != 2:
+                current = exams[current]
+            assert current == 2
         assert "<br>Б)" in sheet["E14"].value
         assert "\\frac" in sheet["E14"].value
         assert "<br>Б)" in sheet["B14"].value

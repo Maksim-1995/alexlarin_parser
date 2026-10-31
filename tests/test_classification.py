@@ -19,7 +19,7 @@ from classification import (
 
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
-EXAM_LABEL = "E | Вектор"
+EXAM_LABEL = "E | Вектор > Векторы и операции с ними"
 TOPIC_LABEL = (
     "T | Геометрия > Планиметрия > Векторы > "
     "Умножение вектора на число. Скалярное произведение векторов"
@@ -62,7 +62,7 @@ def response_items():
 @pytest.fixture
 def numeric_items():
     return [
-        {"task_num": n, "exams_id": 179, "topics_id": 526}
+        {"task_num": n, "exams_id": 180, "topics_id": 526}
         for n in range(1, 20)
     ]
 
@@ -86,21 +86,32 @@ def choices(catalogs):
     return build_category_choices(exams, "E"), build_category_choices(topics, "T")
 
 
-def test_catalog_choices_use_direct_exam_children_and_math_topic_leaves(catalogs):
+def test_catalog_choices_use_all_exam_descendant_leaves_and_math_topic_leaves(catalogs):
     exam_choices, topic_choices = choices(catalogs)
-    # У допустимых 179 и 8 есть дети; дети 180 и 178 недопустимы.
-    assert exam_choices[EXAM_LABEL] == 179
-    assert exam_choices["E | Планиметрия"] == 8
-    assert 180 not in exam_choices.values()
-    assert 178 not in exam_choices.values()
+    # Сохраняются пути родителей, но выбирать можно лишь конечные записи.
+    assert exam_choices[EXAM_LABEL] == 180
+    assert exam_choices["E | Планиметрия > Описанные окружности"] == 178
+    assert exam_choices["E | Чтение графиков и диаграмм"] == 4
+    assert 179 not in exam_choices.values()
+    assert 8 not in exam_choices.values()
+    assert 7 not in exam_choices.values()
+    assert 34 not in exam_choices.values()  # Конечная категория ОГЭ.
     assert topic_choices[TOPIC_LABEL] == 526
     assert 98 not in topic_choices.values()
     assert 193 not in topic_choices.values()
     with (DATA_DIR / "exams.csv").open(encoding="utf-8-sig") as source:
-        rows = list(csv.DictReader(source))
-    assert set(exam_choices.values()) == {
-        int(row["id"]) for row in rows if int(row["parent_of_exam"]) == 2
-    }
+        rows = {int(row["id"]): row for row in csv.DictReader(source)}
+    parents = {int(row["parent_of_exam"]) for row in rows.values()}
+    expected_exams = set()
+    for number, row in rows.items():
+        if number in parents:
+            continue
+        current = int(row["parent_of_exam"])
+        while current and current != 2:
+            current = int(rows[current]["parent_of_exam"])
+        if current == 2:
+            expected_exams.add(number)
+    assert set(exam_choices.values()) == expected_exams
     with (DATA_DIR / "topics.csv").open(encoding="utf-8-sig") as source:
         rows = {int(row["id"]): row for row in csv.DictReader(source)}
     parents = {int(row["parent"]) for row in rows.values()}
@@ -110,6 +121,45 @@ def test_catalog_choices_use_direct_exam_children_and_math_topic_leaves(catalogs
         while current and current != 1:
             current = int(rows[current]["parent"])
         assert current == 1
+
+
+@pytest.mark.parametrize("exam_id", [4, 5, 178, 180])
+def test_final_validation_accepts_direct_and_deep_math_leaves(catalogs, numeric_items, exam_id):
+    numeric_items[0]["exams_id"] = exam_id
+    result = validate_classification(numeric_items, *catalogs)
+    assert result[1]["exams_id"] == exam_id
+
+
+def test_children_are_checked_in_complete_catalog_even_with_reduced_candidates(catalogs, numeric_items):
+    exams, topics = catalogs
+    # Ребёнок 180 убран из кандидатов, но остаётся в исходном справочнике.
+    # Из-за этого родитель 179 всё равно не превращается в лист.
+    reduced = classification.Catalog(
+        [row for row in exams if row["id"] != 180], exams.records, exams.root_id,
+    )
+    assert "E | Вектор" not in build_category_choices(reduced, "E")
+    numeric_items[0]["exams_id"] = 179
+    with pytest.raises(ValueError, match="недопустимый exams_id"):
+        validate_classification(numeric_items, reduced, topics)
+
+
+def test_exam_leaf_label_keeps_parent_path_when_candidates_are_already_reduced(catalogs):
+    exams, _ = catalogs
+    only_leaf = classification.Catalog(
+        [row for row in exams if row["id"] == 180], exams.records, exams.root_id,
+    )
+    assert build_category_choices(only_leaf, "E") == {EXAM_LABEL: 180}
+
+
+def test_other_branch_leaf_is_not_allowed_even_when_in_candidate_rows(catalogs, numeric_items):
+    exams, topics = catalogs
+    mixed = classification.Catalog(
+        [*exams, exams.records[34]], exams.records, exams.root_id,
+    )
+    assert 34 not in build_category_choices(mixed, "E").values()
+    numeric_items[0]["exams_id"] = 34
+    with pytest.raises(ValueError, match="недопустимый exams_id"):
+        validate_classification(numeric_items, mixed, topics)
 
 
 def test_all_nineteen_are_sent_once_and_input_is_unchanged(tasks, cache, response_items):
@@ -122,13 +172,14 @@ def test_all_nineteen_are_sent_once_and_input_is_unchanged(tasks, cache, respons
         assert [task["task_num"] for task in payload["tasks"]] == list(range(1, 20))
         assert EXAM_LABEL in payload["exams"]
         assert TOPIC_LABEL in payload["topics"]
-        assert not any("E | Вектор >" in label for label in payload["exams"])
+        assert "E | Вектор" not in payload["exams"]
+        assert "E | Планиметрия" not in payload["exams"]
         assert "T | основы математического анализа" not in payload["topics"]
         return json.dumps(response_items)
 
     result = run(tasks, cache, response_items, request=request)
     assert len(calls) == 1
-    assert result[2] == {"exams_id": 179, "topics_id": 526}
+    assert result[2] == {"exams_id": 180, "topics_id": 526}
     assert len(result) == 19
     assert tasks == original
 
@@ -136,7 +187,7 @@ def test_all_nineteen_are_sent_once_and_input_is_unchanged(tasks, cache, respons
 def test_new_topic_round_trips_response_and_cache(tasks, cache, response_items):
     response_items[7].update(topic_kind="new", topic_choice=NEW_TOPIC)
     result = run(tasks, cache, response_items)
-    assert result[8] == {"exams_id": 179, "topics_id": NEW_TOPIC}
+    assert result[8] == {"exams_id": 180, "topics_id": NEW_TOPIC}
     assert type(result[2]["topics_id"]) is int
     cached = json.loads(cache.read_text(encoding="utf-8"))
     assert cached["tasks"][7]["topics_id"] == NEW_TOPIC
@@ -151,13 +202,19 @@ def test_new_topic_round_trips_response_and_cache(tasks, cache, response_items):
     assert run(tasks, cache, response_items, request=unexpected_request) == result
 
 
-@pytest.mark.parametrize("bad_first", ["json", "unknown_exam", "missing", "duplicate", "parent_topic"])
+@pytest.mark.parametrize("bad_first", [
+    "json", "unknown_exam", "parent_exam", "foreign_exam", "missing", "duplicate", "parent_topic",
+])
 def test_invalid_contract_is_repaired_for_all_tasks_in_second_request(
     tasks, cache, response_items, bad_first,
 ):
     wrong = copy.deepcopy(response_items)
     if bad_first == "unknown_exam":
         wrong[0]["exam_choice"] = TOPIC_LABEL
+    elif bad_first == "parent_exam":
+        wrong[0]["exam_choice"] = "E | Вектор"
+    elif bad_first == "foreign_exam":
+        wrong[0]["exam_choice"] = "E | Сараи; шины; печки"
     elif bad_first == "missing":
         wrong.pop()
     elif bad_first == "duplicate":
@@ -205,8 +262,11 @@ def test_network_error_is_clear_and_does_not_retry(tasks, cache, response_items)
 
 
 @pytest.mark.parametrize("field,value", [
-    ("exams_id", 180), ("exams_id", 178), ("exams_id", 2),
-    ("exams_id", "Вектор"), ("exams_id", True), ("exams_id", 179.0),
+    ("exams_id", 179), ("exams_id", 8), ("exams_id", 7),
+    ("exams_id", 34), ("exams_id", 2), ("exams_id", 999999),
+    ("exams_id", 0), ("exams_id", -1), ("exams_id", "180"),
+    ("exams_id", []), ("exams_id", {}), ("exams_id", None),
+    ("exams_id", "Вектор"), ("exams_id", True), ("exams_id", 180.0),
     ("topics_id", 98), ("topics_id", 193), ("topics_id", 196),  # Лист физики.
     ("topics_id", 999999), ("topics_id", 0), ("topics_id", -1),
     ("topics_id", True), ("topics_id", 526.0), ("topics_id", [526]),
@@ -287,7 +347,7 @@ def test_choice_contract_requires_exact_labels_and_explicit_topic_kind(catalogs,
     elif change == "wrong_kind":
         response_items[0]["topic_kind"] = "unknown"
     elif change == "numeric_exam":
-        response_items[0]["exam_choice"] = 179
+        response_items[0]["exam_choice"] = 180
     elif change == "numeric_topic":
         response_items[0]["topic_choice"] = 526
     elif change == "extra":
@@ -333,7 +393,7 @@ def test_new_name_cannot_randomly_choose_between_duplicate_leaf_names(tmp_path):
         "topic_kind": "new", "topic_choice": "Одинаковая тема",
     }]
     with pytest.raises(ValueError):
-        decode_category_choices(selected, {EXAM_LABEL: 179}, build_category_choices(topics, "T"), topics=topics)
+        decode_category_choices(selected, {EXAM_LABEL: 180}, build_category_choices(topics, "T"), topics=topics)
 
 
 def test_one_math_leaf_is_unambiguous_even_if_physics_has_the_same_name(tmp_path):
@@ -348,7 +408,7 @@ def test_one_math_leaf_is_unambiguous_even_if_physics_has_the_same_name(tmp_path
         "topic_kind": "new", "topic_choice": "ВЕКТОРЫ",
     }]
     decoded = decode_category_choices(
-        selected, {EXAM_LABEL: 179}, build_category_choices(topics, "T"), topics=topics,
+        selected, {EXAM_LABEL: 180}, build_category_choices(topics, "T"), topics=topics,
     )
     assert decoded[0]["topics_id"] == 20
 
@@ -434,7 +494,7 @@ def test_catalog_identity_includes_ids_names_and_parent_links(tmp_path, tasks, c
 
 
 @pytest.mark.parametrize("corruption", [
-    "old_version", "version_only", "previous_version", "forbidden_exam", "parent_topic", "unknown_topic", "invalid_new",
+    "old_version", "version_only", "previous_version", "old_rules", "forbidden_exam", "parent_topic", "unknown_topic", "invalid_new",
     "missing_choices", "choices_differ", "wrong_kind", "invalid_json",
 ])
 def test_invalid_or_legacy_cache_is_never_accepted(tasks, cache, response_items, corruption):
@@ -443,13 +503,15 @@ def test_invalid_or_legacy_cache_is_never_accepted(tasks, cache, response_items,
     if corruption == "old_version":
         cached["version"] = 1
         cached["fingerprint"] = "legacy-classification-fingerprint"
-        cached["tasks"][0].update(exams_id=180, topics_id=98)
+        cached["tasks"][0].update(exams_id=179, topics_id=98)
     elif corruption == "version_only":
         cached["version"] = 1
     elif corruption == "previous_version":
         cached["version"] = classification.CACHE_VERSION - 1
+    elif corruption == "old_rules":
+        cached["rules_version"] = "direct-exams-math-leaves-new-topics-v3"
     elif corruption == "forbidden_exam":
-        cached["tasks"][0]["exams_id"] = 180
+        cached["tasks"][0]["exams_id"] = 179
     elif corruption == "parent_topic":
         cached["tasks"][0]["topics_id"] = 98
     elif corruption == "unknown_topic":
@@ -471,7 +533,36 @@ def test_invalid_or_legacy_cache_is_never_accepted(tasks, cache, response_items,
 
     result = run(tasks, cache, response_items, request=request)
     assert len(calls) == 1
-    assert result[1] == {"exams_id": 179, "topics_id": 526}
+    assert result[1] == {"exams_id": 180, "topics_id": 526}
+
+
+@pytest.mark.parametrize("keep_current_metadata", [False, True])
+def test_old_direct_parent_cache_is_rejected_even_with_current_fingerprint(
+    tasks, cache, response_items, keep_current_metadata,
+):
+    run(tasks, cache, response_items)
+    cached = json.loads(cache.read_text(encoding="utf-8"))
+    for task in cached["tasks"]:
+        task["exams_id"] = 179
+    for choice in cached["choices"]:
+        choice["exam_choice"] = "E | Вектор"
+    if not keep_current_metadata:
+        cached["version"] = 3
+        cached["rules_version"] = "direct-exams-math-leaves-new-topics-v3"
+        cached["fingerprint"] = "old-direct-parent-fingerprint"
+    cache.write_text(json.dumps(cached), encoding="utf-8")
+    calls = []
+
+    def request(prompt, *, model):
+        calls.append(prompt)
+        return json.dumps(response_items)
+
+    result = run(tasks, cache, response_items, request=request)
+    assert len(calls) == 1
+    assert result[1] == {"exams_id": 180, "topics_id": 526}
+    replaced = json.loads(cache.read_text(encoding="utf-8"))
+    assert replaced["choices"] == response_items
+    assert replaced["tasks"][0]["exams_id"] == 180
 
 
 def test_failed_reclassification_preserves_previous_cache(tasks, cache, response_items):

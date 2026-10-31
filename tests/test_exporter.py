@@ -32,7 +32,7 @@ class ExporterTests(unittest.TestCase):
                 "condition": r"Найдите длину $AA_1$ и значение $\sqrt{43}$.",
                 "image_name": self.image_names.get(number, ""),
                 "answer": "0,9940" if number == 5 else "12",
-                "exams_id": 179,
+                "exams_id": 180,
                 "topics_id": 526,
             }
             for number in range(1, 20)
@@ -133,7 +133,7 @@ class ExporterTests(unittest.TestCase):
             self.assertIsNone(row[3].value)
             self.assertEqual(row[4].value, task["answer"])
             self.assertEqual(row[4].data_type, "s")
-            self.assertEqual(row[5].value, 179)
+            self.assertEqual(row[5].value, 180)
             self.assertEqual(row[5].data_type, "n")
             self.assertEqual(row[6].value, task["topics_id"])
             self.assertEqual(row[6].data_type, "s" if task["task_num"] == 8 else "n")
