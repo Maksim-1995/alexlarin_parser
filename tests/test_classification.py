@@ -202,6 +202,78 @@ def test_new_topic_round_trips_response_and_cache(tasks, cache, response_items):
     assert run(tasks, cache, response_items, request=unexpected_request) == result
 
 
+@pytest.mark.parametrize("numbers", [(3, 11, 19), (16, 4, 2)])
+def test_semantic_prompt_change_refreshes_valid_cache_without_task_number_overrides(
+    tasks, cache, response_items, catalogs, monkeypatch, numbers,
+):
+    # Ответы ниже — подмена API для проверки контракта и кэша.
+    # Этот тест не доказывает, что настоящая модель выберет тему по смыслу.
+    examples = [
+        ("В конус вписан шар. По объёму конуса найдите объём шара.", 616, 585),
+        (
+            "По графику кусочно заданной функции определите её параметры "
+            "и найдите аргумент при заданном значении функции.",
+            541, "Кусочно заданная функция",
+        ),
+        (
+            "Трёхзначное число делится на каждую из своих цифр. "
+            "Исследуйте делимость такого числа.",
+            643, 637,
+        ),
+    ]
+    labels_by_id = {number: label for label, number in choices(catalogs)[1].items()}
+    old_response = copy.deepcopy(response_items)
+    updated_response = copy.deepcopy(response_items)
+    expected_topics = {}
+    for number, (condition, previous_topic, expected_topic) in zip(numbers, examples):
+        tasks[number - 1]["condition"] = condition
+        old_response[number - 1]["topic_choice"] = labels_by_id[previous_topic]
+        selected = updated_response[number - 1]
+        if isinstance(expected_topic, str):
+            selected.update(topic_kind="new", topic_choice=expected_topic)
+        else:
+            selected["topic_choice"] = labels_by_id[expected_topic]
+        expected_topics[number] = expected_topic
+
+    def no_request(*args, **kwargs):
+        pytest.fail("При подходящем кэше запрос к Gemini запрещён")
+
+    current_prompt = classification.PROMPT
+    with monkeypatch.context() as previous_settings:
+        previous_settings.setattr(
+            classification, "PROMPT",
+            "Классифицируй все задания по полным подписям конечных категорий.",
+        )
+        previous = run(tasks, cache, old_response)
+        # Ошибочные по смыслу листья формально допустимы. Меняется именно
+        # инструкция, а не справочники, условия, версия правил или формата.
+        assert [previous[number]["topics_id"] for number in numbers] == [616, 541, 643]
+        assert run(tasks, cache, old_response, request=no_request) == previous
+        previous_cache = json.loads(cache.read_text(encoding="utf-8"))
+
+    calls = []
+
+    def updated_request(prompt, *, model):
+        calls.append(prompt)
+        assert prompt.startswith(current_prompt + "\nДанные:\n")
+        payload = json.loads(prompt.split("Данные:\n", 1)[1])
+        assert payload["tasks"] == tasks
+        assert len(payload["tasks"]) == 19
+        return json.dumps(updated_response)
+
+    result = run(tasks, cache, updated_response, request=updated_request)
+    assert len(calls) == 1
+    for number in range(1, 20):
+        assert result[number]["topics_id"] == expected_topics.get(number, 526)
+    updated_cache = json.loads(cache.read_text(encoding="utf-8"))
+    assert updated_cache["fingerprint"] != previous_cache["fingerprint"]
+    assert updated_cache["version"] == previous_cache["version"]
+    assert updated_cache["rules_version"] == previous_cache["rules_version"]
+    assert updated_cache["choices"] == updated_response
+    assert updated_cache["requests_used"] == 1
+    assert run(tasks, cache, updated_response, request=no_request) == result
+
+
 @pytest.mark.parametrize("bad_first", [
     "json", "unknown_exam", "parent_exam", "foreign_exam", "missing", "duplicate", "parent_topic",
 ])

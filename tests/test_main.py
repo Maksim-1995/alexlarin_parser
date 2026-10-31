@@ -148,6 +148,80 @@ def test_real_sources_and_both_caches_rebuild_with_network_blocked(local_project
         workbook.close()
 
 
+def test_changed_prompt_reclassifies_topics_through_main_and_reuses_both_caches(
+    local_project, monkeypatch,
+):
+    """Проверяем обновление выгрузки через main; смысловой выбор API подменён."""
+    original_sources = {
+        name: (local_project / "input" / name).read_bytes() for name in SOURCE_NAMES
+    }
+    topics = classification.load_catalog(
+        local_project / "data" / "topics.csv",
+        name_column="name", parent_column="parent", root_id=1,
+    )
+    labels = {
+        number: label
+        for label, number in classification.build_category_choices(topics, "T").items()
+    }
+    previous_prompt = "Предыдущая инструкция классификации без смысловых уточнений."
+    current_prompt = classification.PROMPT
+    calls = []
+    assignments = {3: 616, 11: 541, 19: 643}
+
+    def fake_response(prompt, *, model, schema):
+        calls.append(prompt)
+        items = json.loads(fake_classification(prompt, model=model, schema=schema))
+        for item in items:
+            if item["task_num"] not in assignments:
+                continue
+            topic = assignments[item["task_num"]]
+            item["topic_kind"] = "existing" if type(topic) is int else "new"
+            item["topic_choice"] = labels[topic] if type(topic) is int else topic
+        return json.dumps(items, ensure_ascii=False)
+
+    monkeypatch.setattr(classification, "request_gemini", fake_response)
+    monkeypatch.setattr(classification, "PROMPT", previous_prompt)
+    main.main(main.DEFAULT_PAGE_URL)
+    cache_path = local_project / "input" / "trvar542_classification.json"
+    previous_cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert {row["task_num"]: row["topics_id"] for row in previous_cache["tasks"]
+            if row["task_num"] in assignments} == assignments
+
+    # Меняется только инструкция: правила структуры, данные и настройки те же.
+    monkeypatch.setattr(classification, "PROMPT", current_prompt)
+    assignments = {3: 585, 11: "Кусочно заданная функция", 19: 637}
+    main.main(main.DEFAULT_PAGE_URL)
+    current_cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert len(calls) == 2
+    assert calls[0].startswith(previous_prompt)
+    assert calls[1].startswith(current_prompt)
+    assert current_cache["rules_version"] == previous_cache["rules_version"]
+    assert current_cache["fingerprint"] != previous_cache["fingerprint"]
+    assert current_cache["choices"][10]["topic_kind"] == "new"
+    assert {row["task_num"]: row["topics_id"] for row in current_cache["tasks"]
+            if row["task_num"] in assignments} == assignments
+
+    def gemini_forbidden(*args, **kwargs):
+        pytest.fail("Повторная сборка с актуальным промптом должна читать кэш")
+
+    monkeypatch.setattr(classification, "request_gemini", gemini_forbidden)
+    main.main(main.DEFAULT_PAGE_URL)
+    assert json.loads(cache_path.read_text(encoding="utf-8")) == current_cache
+    assert all((local_project / "input" / name).read_bytes() == contents
+               for name, contents in original_sources.items())
+
+    workbook = load_workbook(local_project / "output" / "trvar542" / "tasks.xlsx")
+    try:
+        sheet = workbook["Tasks"]
+        assert sheet.max_column == 7 and sheet.max_row == 20
+        assert sheet["G4"].value == 585 and sheet["G4"].data_type == "n"
+        assert sheet["G12"].value == "Кусочно заданная функция"
+        assert sheet["G12"].data_type == "s"
+        assert sheet["G20"].value == 637 and sheet["G20"].data_type == "n"
+    finally:
+        workbook.close()
+
+
 @pytest.mark.parametrize("failure", ["api", "invalid_response"])
 def test_failed_classification_keeps_previous_successful_files(local_project, monkeypatch, failure):
     monkeypatch.setattr(classification, "request_gemini", fake_classification)
