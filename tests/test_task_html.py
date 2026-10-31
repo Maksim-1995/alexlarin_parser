@@ -44,6 +44,21 @@ class TaskHtmlTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Непарный"):
             add_subtask_breaks("А) Найдите $x. Б) Продолжите.")
 
+    def test_escaped_dollar_does_not_open_formula_or_hide_subparts(self):
+        source = r"А) Цена \$5. Б) Найдите $x$. В) Сравните \$10."
+        expected = r"А) Цена \$5.<br>Б) Найдите $x$.<br>В) Сравните \$10."
+        result = add_subtask_breaks(source)
+        self.assertEqual(result, expected)
+        self.assertEqual(add_subtask_breaks(result), expected)
+
+    def test_escaped_dollar_and_subpart_label_inside_formula_stay_unchanged(self):
+        formula = r"$$\text{Б) цена \$} + x$$"
+        source = "А) " + formula + " Б) Найдите $x$."
+        self.assertEqual(
+            add_subtask_breaks(source),
+            "А) " + formula + "<br>Б) Найдите $x$.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

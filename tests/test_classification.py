@@ -244,6 +244,10 @@ def test_final_validation_requires_exactly_nineteen_records(catalogs, numeric_it
     "основы математического анализа", "Математика", True, 999999, [], {}, None,
     "материальная точка. Система отсчета",  # Существующий лист физики.
     "Первообразная для задачи 8", "<b>Первообразная</b>",
+    "Нет подходящей конечной темы", "Не найдена подходящая тема в справочнике",
+    "Тема не найдена", "Не определено в каталоге",
+    "Первообразная\x00", "Первообразная\x0b", "Первообразная\u200b",
+    "Первообразная для задачи Ⅷ", "Вероятность ½",
 ])
 def test_new_topic_rejects_invalid_names_and_parent_bypass(catalogs, response_items, name):
     response_items[0].update(topic_kind="new", topic_choice=name)
@@ -430,7 +434,7 @@ def test_catalog_identity_includes_ids_names_and_parent_links(tmp_path, tasks, c
 
 
 @pytest.mark.parametrize("corruption", [
-    "old_version", "version_only", "forbidden_exam", "parent_topic", "unknown_topic", "invalid_new",
+    "old_version", "version_only", "previous_version", "forbidden_exam", "parent_topic", "unknown_topic", "invalid_new",
     "missing_choices", "choices_differ", "wrong_kind", "invalid_json",
 ])
 def test_invalid_or_legacy_cache_is_never_accepted(tasks, cache, response_items, corruption):
@@ -442,6 +446,8 @@ def test_invalid_or_legacy_cache_is_never_accepted(tasks, cache, response_items,
         cached["tasks"][0].update(exams_id=180, topics_id=98)
     elif corruption == "version_only":
         cached["version"] = 1
+    elif corruption == "previous_version":
+        cached["version"] = classification.CACHE_VERSION - 1
     elif corruption == "forbidden_exam":
         cached["tasks"][0]["exams_id"] = 180
     elif corruption == "parent_topic":
@@ -500,6 +506,17 @@ def test_atomic_cache_replace_failure_keeps_previous_success(
         run(tasks, cache, response_items)
     assert len(replacements) == 1
     assert cache.read_bytes() == original
+    assert not replacements[0].exists()
+
+
+def test_cache_write_does_not_overwrite_another_pending_file(tasks, cache, response_items):
+    # Старое общее имя .tmp могло принадлежать другому запуску.
+    another_pending = cache.with_suffix(".tmp")
+    another_pending.write_text("Чужая незавершённая запись", encoding="utf-8")
+
+    assert len(run(tasks, cache, response_items)) == 19
+    assert another_pending.read_text(encoding="utf-8") == "Чужая незавершённая запись"
+    assert not list(cache.parent.glob(cache.name + ".*.tmp"))
 
 
 @pytest.mark.parametrize("rows", [
@@ -536,6 +553,19 @@ def test_missing_task_is_rejected_before_request(tasks, cache, response_items):
         pytest.fail("При неполном входе запрос недопустим")
 
     with pytest.raises(ValueError, match="ровно задания 1–19"):
+        run(tasks, cache, response_items, request=unexpected)
+
+
+@pytest.mark.parametrize("invalid_task", [None, [], 1, "условие"])
+def test_malformed_input_task_is_rejected_clearly_before_request(
+    tasks, cache, response_items, invalid_task,
+):
+    tasks[0] = invalid_task
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("При некорректной структуре задания запрос недопустим")
+
+    with pytest.raises(ValueError, match="задание должно быть словарём"):
         run(tasks, cache, response_items, request=unexpected)
 
 

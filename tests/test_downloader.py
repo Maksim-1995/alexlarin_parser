@@ -1,5 +1,7 @@
 """Локальные исходники проверяются до использования и до замены файла."""
 
+from pathlib import Path
+
 import pytest
 import requests
 
@@ -54,3 +56,21 @@ def test_download_is_saved_after_validation_and_leaves_no_temporary_file(tmp_pat
     assert downloader.load_source("https://example.org/source", source, validate) == "valid source"
     assert source.read_bytes() == b"valid source"
     assert list(source.parent.iterdir()) == [source]
+
+
+def test_failed_atomic_save_preserves_local_file_and_cleans_temporary_file(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    source.write_bytes(b"old invalid source")
+    monkeypatch.setattr(downloader, "download_bytes", lambda url: b"valid source")
+
+    def fail_replace(pending, destination):
+        assert destination == source
+        assert pending.read_bytes() == b"valid source"
+        assert source.read_bytes() == b"old invalid source"
+        raise OSError("Не удалось заменить файл")
+
+    monkeypatch.setattr(Path, "replace", fail_replace)
+    with pytest.raises(OSError, match="заменить файл"):
+        downloader.load_source("https://example.org/source", source, validate)
+    assert source.read_bytes() == b"old invalid source"
+    assert list(tmp_path.iterdir()) == [source]

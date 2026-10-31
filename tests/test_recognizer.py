@@ -24,7 +24,8 @@ class RecognizerTests(unittest.TestCase):
         self.pdf_path = self.root / "variant.pdf"
         self.pdf_path.write_bytes(b"%PDF-test-input")
         self.cache_path = self.root / "variant_conditions_gemini.json"
-        self.silent = redirect_stdout(StringIO())
+        self.stdout = StringIO()
+        self.silent = redirect_stdout(self.stdout)
         self.silent.__enter__()
         self.addCleanup(self.silent.__exit__, None, None, None)
 
@@ -69,6 +70,7 @@ class RecognizerTests(unittest.TestCase):
         self.assertEqual(sorted(result), list(range(1, 20)))
         client.assert_not_called()
         render.assert_not_called()
+        self.assertIn("Запросов OCR: 0.", self.stdout.getvalue())
 
     def test_interrupted_run_resumes_without_repeating_saved_tasks(self):
         requested = []
@@ -94,12 +96,16 @@ class RecognizerTests(unittest.TestCase):
             cached = json.loads(self.cache_path.read_text(encoding="utf-8"))
             self.assertEqual([item["task_num"] for item in cached["tasks"]], [1, 2])
 
+            self.stdout.seek(0)
+            self.stdout.truncate(0)
             client.models.generate_content.reset_mock()
             client.models.generate_content.side_effect = self.response
             result = recognizer.recognize_conditions(self.pdf_path)
         calls = client.models.generate_content.call_args_list
         numbers = [int(call.kwargs["contents"][0].rsplit(" ", 1)[1]) for call in calls]
         self.assertEqual(numbers, list(range(3, 20)))
+        self.assertIn("Запрос OCR 1/17.", self.stdout.getvalue())
+        self.assertIn("Запросов OCR: 17.", self.stdout.getvalue())
         for call in calls:
             image = call.kwargs["contents"][1].inline_data
             self.assertEqual(image.mime_type, "image/png")

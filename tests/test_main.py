@@ -131,7 +131,8 @@ def test_real_sources_and_both_caches_rebuild_with_network_blocked(local_project
         workbook.close()
 
 
-def test_failed_classification_keeps_previous_successful_files(local_project, monkeypatch):
+@pytest.mark.parametrize("failure", ["api", "invalid_response"])
+def test_failed_classification_keeps_previous_successful_files(local_project, monkeypatch, failure):
     monkeypatch.setattr(classification, "request_gemini", fake_classification)
     main.main(main.DEFAULT_PAGE_URL)
     output = local_project / "output" / "trvar542"
@@ -140,12 +141,19 @@ def test_failed_classification_keeps_previous_successful_files(local_project, mo
     original_archive = archive.read_bytes()
     (local_project / "input" / "trvar542_classification.json").unlink()
 
+    calls = []
+
     def fail_classification(*args, **kwargs):
-        raise RuntimeError("Gemini: сеть или API недоступны")
+        calls.append(args)
+        if failure == "api":
+            raise RuntimeError("Gemini: сеть или API недоступны")
+        return "Некорректный JSON"
 
     monkeypatch.setattr(classification, "request_gemini", fail_classification)
-    with pytest.raises(RuntimeError, match="Gemini"):
+    error_type, message = (RuntimeError, "Gemini") if failure == "api" else (ValueError, "после двух запросов")
+    with pytest.raises(error_type, match=message):
         main.main(main.DEFAULT_PAGE_URL)
+    assert len(calls) == (1 if failure == "api" else 2)
     assert {path.name: path.read_bytes() for path in output.iterdir()} == before
     assert archive.read_bytes() == original_archive
     assert not (local_project / "input" / "previous_output").exists()
@@ -185,3 +193,68 @@ def test_real_pdf_with_wrong_number_or_year_is_rejected(local_project):
         main.read_pdf_source(data, "https://alexlarin.net/ege/2026/trvar541.html")
     with pytest.raises(ValueError, match="Год"):
         main.read_pdf_source(data, "https://alexlarin.net/ege/2025/trvar542.html")
+
+
+@pytest.mark.parametrize("extension", ["pdf", "js", "png"])
+@pytest.mark.parametrize("wrong_prefix", [
+    "https://other.example/ege/2026/", "https://alexlarin.net/ege/2025/",
+])
+def test_html_rejects_resource_from_other_origin_or_year(extension, wrong_prefix):
+    html = '''<html><title>Тренировочный вариант №542 ЕГЭ - 2026</title>
+    <a href="trvar542.pdf">PDF</a><script src="trvar542.js"></script>
+    <img src="trvar542.png"></html>'''
+    wrong_html = html.replace(f'"trvar542.{extension}"', f'"{wrong_prefix}trvar542.{extension}"')
+    with pytest.raises(ValueError, match=f"trvar542.{extension}"):
+        main.parse_source_page(wrong_html.encode(), main.DEFAULT_PAGE_URL)
+
+
+@pytest.fixture
+def extra_answers():
+    return {
+        "source_url": "https://alexlarin.net/ege/2026/trvar542.png",
+        "method": "manual_transcription",
+        "answers": {str(number): "0,9940" if number == 13 else "$\\frac{2}{3}$" for number in range(13, 20)},
+    }
+
+
+def test_extra_answers_keep_original_strings_and_validate_source(tmp_path, extra_answers):
+    path = tmp_path / "answers.json"
+    path.write_text(json.dumps(extra_answers), encoding="utf-8")
+    result = main.read_extra_answers(path, extra_answers["source_url"])
+    assert list(result["answers"]) == list(range(13, 20))
+    assert result["answers"][13] == "0,9940"
+    assert result["answers"][17] == "$\\frac{2}{3}$"
+    assert result["method"] == "manual_transcription"
+    with pytest.raises(ValueError, match="другой картинке"):
+        main.read_extra_answers(path, "https://alexlarin.net/ege/2026/trvar541.png")
+
+
+@pytest.mark.parametrize("corruption", [
+    "missing", "invalid_json", "not_object", "missing_answers", "not_answers_object",
+    "missing_method", "invalid_number", "empty_answer", "boolean_answer", "missing_task", "duplicate_task",
+])
+def test_extra_answers_fail_with_clear_error(tmp_path, extra_answers, corruption):
+    path = tmp_path / "answers.json"
+    image_url = extra_answers["source_url"]
+    if corruption == "not_object":
+        extra_answers = []
+    elif corruption == "missing_answers":
+        extra_answers.pop("answers")
+    elif corruption == "not_answers_object":
+        extra_answers["answers"] = []
+    elif corruption == "missing_method":
+        extra_answers.pop("method")
+    elif corruption == "invalid_number":
+        extra_answers["answers"]["thirteen"] = extra_answers["answers"].pop("13")
+    elif corruption == "empty_answer":
+        extra_answers["answers"]["13"] = " "
+    elif corruption == "boolean_answer":
+        extra_answers["answers"]["13"] = True
+    elif corruption == "missing_task":
+        extra_answers["answers"].pop("13")
+    elif corruption == "duplicate_task":
+        extra_answers["answers"]["013"] = "1"
+    if corruption != "missing":
+        path.write_text("broken JSON" if corruption == "invalid_json" else json.dumps(extra_answers), encoding="utf-8")
+    with pytest.raises(ValueError, match="answers.json"):
+        main.read_extra_answers(path, image_url)

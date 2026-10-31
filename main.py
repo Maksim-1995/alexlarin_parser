@@ -63,12 +63,20 @@ def parse_source_page(data, page_url):
         "png": r'<img\b[^>]*\bsrc\s*=\s*["\']([^"\']+)["\']',
     }
     links = {}
+    source_address = urlsplit(page_url)
     for extension, pattern in patterns.items():
         expected_name = f"{variant_id}.{extension}"
+        expected_path = urlsplit(urljoin(page_url, expected_name)).path
         for source in re.findall(pattern, html, re.I):
             decoded_source = unquote(unescape(source))
-            if Path(urlsplit(decoded_source).path).name == expected_name:
-                links[extension] = urljoin(page_url, decoded_source)
+            resource_url = urljoin(page_url, decoded_source)
+            address = urlsplit(resource_url)
+            if (
+                address.scheme in {"http", "https"}
+                and address.netloc.casefold() == source_address.netloc.casefold()
+                and address.path == expected_path
+            ):
+                links[extension] = resource_url
                 break
         if extension not in links:
             raise ValueError(f"В HTML не найдена ссылка на {expected_name}")
@@ -117,6 +125,38 @@ def validate_answer_image(data):
             raise ValueError("Пустое изображение")
     except (RuntimeError, ValueError) as error:
         raise ValueError("Не удалось прочитать PNG с ответами") from error
+
+
+def read_extra_answers(path, image_url):
+    """Прочитать ручной перенос ответов 13–19 и проверить его источник."""
+    path = Path(path)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError) as error:
+        raise ValueError(f"Не удалось прочитать файл ответов {path}: {error}") from error
+    if not isinstance(data, dict):
+        raise ValueError(f"В файле ответов {path} нужен JSON-объект")
+    if data.get("source_url") != image_url:
+        raise ValueError(f"JSON ответов {path} относится к другой картинке ответов")
+    if not isinstance(data.get("method"), str) or not data["method"].strip():
+        raise ValueError(f"В файле ответов {path} не указан способ переноса method")
+    if not isinstance(data.get("answers"), dict):
+        raise ValueError(f"В файле ответов {path} нужен объект answers с ответами 13–19")
+
+    answers = {}
+    for number, value in data["answers"].items():
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"Пустой или некорректный ответ {number} в {path}")
+        try:
+            task_num = int(number)
+        except (ValueError, TypeError) as error:
+            raise ValueError(f"Некорректный номер ответа {number!r} в {path}") from error
+        if task_num in answers:
+            raise ValueError(f"Повторный номер ответа {task_num} в {path}")
+        answers[task_num] = value
+    if sorted(answers) != list(range(13, 20)):
+        raise ValueError(f"В файле {path} нужны ровно ответы 13–19")
+    return {**data, "answers": answers}
 
 
 def parse_metadata(text, source_url, export_date):
@@ -325,23 +365,8 @@ def main(page_url):
     load_source(answer_image_url, answer_image_path, validate_answer_image)
 
     extra_answers_path = INPUT_DIR / f"{pdf_path.stem}_answers.json"
-    extra_data = json.loads(extra_answers_path.read_text(encoding="utf-8"))
-    if extra_data["source_url"] != answer_image_url:
-        raise ValueError("JSON относится к другой картинке ответов")
-
-    extra_answers = {}
-    for number, value in extra_data["answers"].items():
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError(f"Пустой или некорректный ответ: {number}")
-        task_num = int(number)
-        if task_num in extra_answers:
-            raise ValueError(f"Повторный номер ответа: {task_num}")
-        extra_answers[task_num] = value
-
-    if sorted(extra_answers) != list(range(13, 20)):
-        raise ValueError("В дополнительном файле нужны ответы 13–19")
-
-    answers.update(extra_answers)
+    extra_data = read_extra_answers(extra_answers_path, answer_image_url)
+    answers.update(extra_data["answers"])
     for task in tasks:
         task["answer"] = answers.get(task["task_num"], "")
     print(f"Всего ответов: {len(answers)}")

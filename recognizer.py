@@ -190,7 +190,10 @@ def recognize_conditions(pdf_path):
             conditions = validate_conditions(previous["tasks"], require_all=False)
             cached = previous
             if len(conditions) == len(TASK_NUMBERS):
-                print(f"Условия прочитаны из OCR-кэша: {cache_path}", flush=True)
+                print(
+                    f"Условия прочитаны из OCR-кэша: {cache_path}. Запросов OCR: 0.",
+                    flush=True,
+                )
                 return conditions
             print(f"В OCR-кэше готово {len(conditions)}/19 заданий. Продолжаем.", flush=True)
         else:
@@ -210,6 +213,8 @@ def recognize_conditions(pdf_path):
         backup_path.write_text(previous_text, encoding="utf-8")
         print(f"Прежний кэш сохранён: {backup_path}", flush=True)
 
+    requests_used = 0
+    requests_needed = len(TASK_NUMBERS) - len(conditions)
     with genai.Client(
         api_key=api_key,
         http_options=types.HttpOptions(
@@ -220,7 +225,12 @@ def recognize_conditions(pdf_path):
         for number in TASK_NUMBERS:
             if number in conditions:
                 continue
-            print(f"Задание {number}/19: OCR через {MODEL}. Тайм-аут — 120 секунд...", flush=True)
+            requests_used += 1
+            print(
+                f"Задание {number}/19: OCR через {MODEL}. "
+                f"Запрос OCR {requests_used}/{requests_needed}. Тайм-аут — 120 секунд...",
+                flush=True,
+            )
             response = client.models.generate_content(
                 model=MODEL,
                 contents=[
@@ -253,7 +263,10 @@ def recognize_conditions(pdf_path):
             print(f"Задание {number} сохранено. Готово: {len(conditions)}/19.", flush=True)
 
     validate_conditions(cached["tasks"])
-    print(f"OCR завершён: 19/19. JSON: {cache_path}", flush=True)
+    print(
+        f"OCR завершён: 19/19. Запросов OCR: {requests_used}. JSON: {cache_path}",
+        flush=True,
+    )
     return conditions
 
 
