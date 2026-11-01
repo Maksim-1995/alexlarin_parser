@@ -1,8 +1,8 @@
-"""OCR условий по крупным изображениям заданий через Gemini.
+"""OCR всех условий по одному изображению полной страницы через Gemini.
 
 Поддерживается двухколоночная вёрстка с номерами 1.–19. в текстовом слое.
-Номера нужны только для поиска областей; условия модель читает с изображений.
-Служебные PNG, ответы API и резервные копии кэша сохраняются в input/.
+Номера нужны для проверки состава страницы; условия читаются с изображения.
+Служебные PNG, ответы API и кэши страниц сохраняются рядом с исходным PDF.
 
 Отдельный запуск без скачивания с сайта:
     python -u recognizer.py --pdf input/trvar542.pdf
@@ -15,6 +15,7 @@ import os
 import unicodedata
 from datetime import datetime
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 import pymupdf
 from google import genai
@@ -28,6 +29,9 @@ METHOD = "gemini_image_ocr"
 DPI = 300
 CACHE_VERSION = 2
 TASK_NUMBERS = list(range(1, 20))
+
+# Эти поля сохранены для чтения пригодных полных кэшей прежнего OCR.
+# Новые запросы используют PAGE_PROMPT и постраничную схему ниже.
 
 PROMPT = r"""
 Перепиши полное условие одного математического задания с изображения.
@@ -49,19 +53,51 @@ PROMPT = r"""
 Верни список из одной записи: task_num и condition.
 """
 
+PAGE_CACHE_VERSION = 1
+AGGREGATE_CACHE_VERSION = 3
+PAGE_METHOD = "gemini_page_image_ocr"
+REQUEST_TIMEOUT_MS = 120_000
+MAX_OUTPUT_TOKENS = 16384
+PAGE_PROMPT = r"""
+Перепиши полные условия всех математических заданий с изображения страницы.
+Номер страницы указан отдельно; верни его в page_num.
+Страница имеет две колонки. Читай задания в обеих колонках, ориентируясь
+на их напечатанные номера. Каждое задание верни один раз: task_num и condition.
+Не включай номер задания в condition. Сохраняй все пункты А, Б, В.
+Не исправляй опечатки исходника и не добавляй сведения от себя.
+Не решай задачи и не генерируй ответы. Исключи титульный и служебный текст,
+бланки «Ответ: ____», колонтитулы и инструкции экзамена.
+Рисунки сохраняются отдельно: не придумывай их словесное описание.
+
+Сохрани исходную математическую запись без преобразований.
+Формулы записывай в LaTeX и заключай в $...$.
+Внимательно прочитай дроби, корни, степени, основания логарифмов, скобки,
+границы интервалов и все строки систем. Корень относится только к выражению
+под его чертой. Не переноси части формул из соседней колонки или задания.
+Если фрагмент нельзя прочитать уверенно, поставь [НЕРАЗБОРЧИВО].
+Не используй Markdown или пояснения вне JSON.
+Верни JSON-объект с полями page_num и tasks — списком всех заданий страницы.
+"""
+
 SCHEMA = {
-    "type": "array",
-    "minItems": 1,
-    "maxItems": 1,
-    "items": {
-        "type": "object",
-        "properties": {
-            "task_num": {"type": "integer"},
-            "condition": {"type": "string"},
+    "type": "object",
+    "properties": {
+        "page_num": {"type": "integer"},
+        "tasks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "task_num": {"type": "integer"},
+                    "condition": {"type": "string"},
+                },
+                "required": ["task_num", "condition"],
+                "additionalProperties": False,
+            },
         },
-        "required": ["task_num", "condition"],
-        "additionalProperties": False,
     },
+    "required": ["page_num", "tasks"],
+    "additionalProperties": False,
 }
 
 
@@ -72,8 +108,8 @@ def validate_conditions(items, *, require_all=True):
 
     conditions = {}
     for item in items:
-        if not isinstance(item, dict):
-            raise ValueError("Некорректная запись задания")
+        if not isinstance(item, dict) or set(item) != {"task_num", "condition"}:
+            raise ValueError("В записи задания нужны только task_num и condition")
         number = item.get("task_num")
         condition = item.get("condition")
         if type(number) is not int or number not in TASK_NUMBERS:
@@ -105,67 +141,85 @@ def get_task_positions(page):
     return positions
 
 
-def render_task_images(pdf_path, image_dir):
-    """Вырезать области от номера задания до следующего номера в колонке."""
+def render_page_images(pdf_path, image_dir):
+    """Сохранить полные страницы и найти ожидаемые номера по текстовому слою."""
     image_dir = Path(image_dir)
     image_dir.mkdir(parents=True, exist_ok=True)
-    areas = {}
+    pages = []
     with pymupdf.open(pdf_path) as document:
-        for page_index, page in enumerate(document):
-            positions = get_task_positions(page)
-            middle_x = page.rect.width / 2
-            for left, right in ((0, middle_x), (middle_x, page.rect.width)):
-                column = sorted(
-                    (item for item in positions if left <= item["x"] < right),
-                    key=lambda item: item["y"],
-                )
-                for index, position in enumerate(column):
-                    number = position["task_num"]
-                    if number in areas:
-                        raise ValueError(f"Повторная область задания {number}")
-                    top = max(0, position["y"] - 12)
-                    bottom = (
-                        column[index + 1]["y"] - 12
-                        if index + 1 < len(column)
-                        else page.rect.height - 25
-                    )
-                    if bottom <= top:
-                        raise ValueError(f"Не удалось определить область задания {number}")
-                    areas[number] = (page_index, pymupdf.Rect(left, top, right, bottom))
-
-        if sorted(areas) != TASK_NUMBERS:
-            missing = sorted(set(TASK_NUMBERS) - set(areas))
+        all_numbers = []
+        for page_num, page in enumerate(document, start=1):
+            numbers = sorted(item["task_num"] for item in get_task_positions(page))
+            pages.append({"page_num": page_num, "task_numbers": numbers})
+            all_numbers.extend(numbers)
+        if sorted(all_numbers) != TASK_NUMBERS:
+            missing = sorted(set(TASK_NUMBERS) - set(all_numbers))
             raise ValueError(
-                f"Не найдены области заданий: {missing}. "
-                "Нужен PDF с двумя колонками и номерами в текстовом слое"
+                "В PDF нужны задания 1–19 без повторов. "
+                f"Не найдены: {missing}; получены номера: {all_numbers}"
             )
+        for page in pages:
+            image_path = image_dir / f"page_{page['page_num']:02d}.png"
+            pixmap = document[page["page_num"] - 1].get_pixmap(
+                dpi=DPI, colorspace=pymupdf.csRGB, alpha=False,
+            )
+            image = pixmap.tobytes("png")
+            image_path.write_bytes(image)
+            page.update(
+                image_path=image_path,
+                image_sha256=hashlib.sha256(image).hexdigest(),
+            )
+    return pages
 
-        images = {}
-        for number in TASK_NUMBERS:
-            page_index, area = areas[number]
-            image_path = image_dir / f"task_{number:02d}.png"
-            document[page_index].get_pixmap(clip=area, dpi=DPI).save(image_path)
-            images[number] = image_path
-    return images
+
+def validate_page_response(data, page_num, expected_numbers):
+    """Проверить один полный ответ, не исправляя его новым запросом."""
+    if not isinstance(data, dict) or set(data) != {"page_num", "tasks"}:
+        raise ValueError("Нужен объект с полями page_num и tasks")
+    if type(data["page_num"]) is not int or data["page_num"] != page_num:
+        raise ValueError(f"Ожидался номер страницы {page_num}")
+    conditions = validate_conditions(data["tasks"], require_all=False)
+    if sorted(conditions) != sorted(expected_numbers):
+        raise ValueError(
+            f"Страница {page_num}: ожидались задания {sorted(expected_numbers)}, "
+            f"получены {sorted(conditions)}"
+        )
+    return conditions
+
+
+def atomic_write_json(path, data):
+    """Старый файл сохраняется при ошибке записи или атомарной замены."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pending = None
+    try:
+        with NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent,
+            prefix=path.name + ".", suffix=".tmp", delete=False,
+        ) as target:
+            pending = Path(target.name)
+            json.dump(data, target, ensure_ascii=False, indent=2)
+        pending.replace(path)
+    finally:
+        if pending is not None:
+            pending.unlink(missing_ok=True)
 
 
 def write_cache(cache_path, cached, conditions):
-    """Заменить кэш целиком после успешной записи временного файла."""
-    cached["tasks"] = [
-        {"task_num": number, "condition": conditions[number]}
-        for number in sorted(conditions)
-    ]
-    pending_path = cache_path.with_suffix(".tmp")
-    pending_path.write_text(
-        json.dumps(cached, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    pending_path.replace(cache_path)
+    """Сохранить общий результат в прежнем формате списка tasks."""
+    data = {
+        **cached,
+        "tasks": [
+            {"task_num": number, "condition": conditions[number]}
+            for number in sorted(conditions)
+        ],
+    }
+    atomic_write_json(cache_path, data)
 
 
-def recognize_conditions(pdf_path):
-    """Распознавать по одному заданию, продолжая незавершённую обработку."""
-    pdf_path = Path(pdf_path)
-    identity = {
+def legacy_cache_identity(pdf_path):
+    """Точная конфигурация прежнего OCR: только полный кэш пригоден к чтению."""
+    return {
         "version": CACHE_VERSION,
         "method": METHOD,
         "pdf_sha256": hashlib.sha256(pdf_path.read_bytes()).hexdigest(),
@@ -173,98 +227,181 @@ def recognize_conditions(pdf_path):
         "prompt": PROMPT,
         "dpi": DPI,
     }
+
+
+def image_parameters():
+    return {"dpi": DPI, "colorspace": "RGB", "alpha": False}
+
+
+def aggregate_cache_identity(pdf_path):
+    return {
+        "version": AGGREGATE_CACHE_VERSION,
+        "method": PAGE_METHOD,
+        "pdf_sha256": hashlib.sha256(pdf_path.read_bytes()).hexdigest(),
+        "model": MODEL,
+        "prompt": PAGE_PROMPT,
+        "image_parameters": image_parameters(),
+        "schema": SCHEMA,
+        "max_output_tokens": MAX_OUTPUT_TOKENS,
+        "timeout_ms": REQUEST_TIMEOUT_MS,
+        "http_attempts": 1,
+    }
+
+
+def page_cache_identity(page):
+    # Здесь нет хеша всего PDF: изменение другой страницы не отменяет этот кэш.
+    return {
+        "version": PAGE_CACHE_VERSION,
+        "method": PAGE_METHOD,
+        "page_num": page["page_num"],
+        "image_sha256": page["image_sha256"],
+        "task_numbers": page["task_numbers"],
+        "model": MODEL,
+        "prompt": PAGE_PROMPT,
+        "image_parameters": image_parameters(),
+        "schema": SCHEMA,
+        "max_output_tokens": MAX_OUTPUT_TOKENS,
+        "timeout_ms": REQUEST_TIMEOUT_MS,
+        "http_attempts": 1,
+    }
+
+
+def read_complete_cache(cache_path, identities):
+    if not cache_path.is_file():
+        return None
+    try:
+        data = json.loads(cache_path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("Нужен JSON-объект")
+        if not any(
+            all(data.get(key) == value for key, value in identity.items())
+            for identity in identities
+        ):
+            raise ValueError("изменились исходник или настройки OCR")
+        return validate_conditions(data["tasks"])
+    except (ValueError, TypeError, KeyError) as error:
+        print(f"Полный OCR-кэш не подходит: {cache_path}: {error}", flush=True)
+        return None
+
+
+def recognize_conditions(pdf_path):
+    """Один вызов на отсутствующую страницу; пригодный полный кэш — ноль."""
+    pdf_path = Path(pdf_path)
     cache_path = pdf_path.with_name(f"{pdf_path.stem}_conditions_gemini.json")
-    cached = dict(identity)
-    conditions = {}
-    previous_text = None
-
-    if cache_path.exists():
-        text = cache_path.read_text(encoding="utf-8")
-        try:
-            previous = json.loads(text)
-        except json.JSONDecodeError as error:
-            raise ValueError(f"Повреждён JSON-кэш: {cache_path}") from error
-        if not isinstance(previous, dict):
-            raise ValueError(f"Некорректный JSON-кэш: {cache_path}")
-        if all(previous.get(key) == value for key, value in identity.items()):
-            conditions = validate_conditions(previous["tasks"], require_all=False)
-            cached = previous
-            if len(conditions) == len(TASK_NUMBERS):
-                print(
-                    f"Условия прочитаны из OCR-кэша: {cache_path}. Запросов OCR: 0.",
-                    flush=True,
-                )
-                return conditions
-            print(f"В OCR-кэше готово {len(conditions)}/19 заданий. Продолжаем.", flush=True)
-        else:
-            previous_text = text
-
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError("Не задана переменная GEMINI_API_KEY")
+    identity = aggregate_cache_identity(pdf_path)
+    conditions = read_complete_cache(cache_path, (identity, legacy_cache_identity(pdf_path)))
+    if conditions is not None:
+        print(
+            f"Условия прочитаны из OCR-кэша: {cache_path}. Запросов OCR: 0.",
+            flush=True,
+        )
+        return conditions
 
     ocr_dir = pdf_path.parent / f"{pdf_path.stem}_ocr"
-    images = render_task_images(pdf_path, ocr_dir)
-    print(f"Изображения для OCR: {ocr_dir}; разрешение: {DPI} dpi.", flush=True)
-
-    if previous_text is not None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        backup_path = ocr_dir / f"conditions_before_{timestamp}.json"
-        backup_path.write_text(previous_text, encoding="utf-8")
-        print(f"Прежний кэш сохранён: {backup_path}", flush=True)
+    pages = render_page_images(pdf_path, ocr_dir)
+    missing = []
+    conditions = {}
+    for page in pages:
+        page["cache_path"] = ocr_dir / f"page_{page['page_num']:02d}.json"
+        page["identity"] = page_cache_identity(page)
+        if page["cache_path"].is_file():
+            try:
+                cached = json.loads(page["cache_path"].read_text(encoding="utf-8"))
+                if not isinstance(cached, dict) or cached.get("identity") != page["identity"]:
+                    raise ValueError("изменились страница или настройки OCR")
+                result = validate_page_response(
+                    cached["response"], page["page_num"], page["task_numbers"],
+                )
+            except (ValueError, TypeError, KeyError) as error:
+                print(f"Кэш страницы {page['page_num']} не подходит: {error}", flush=True)
+            else:
+                conditions.update(result)
+                print(f"Страница {page['page_num']} прочитана из кэша.", flush=True)
+                continue
+        missing.append(page)
 
     requests_used = 0
-    requests_needed = len(TASK_NUMBERS) - len(conditions)
-    with genai.Client(
-        api_key=api_key,
-        http_options=types.HttpOptions(
-            timeout=120_000,
-            retry_options=types.HttpRetryOptions(attempts=1),
-        ),
-    ) as client:
-        for number in TASK_NUMBERS:
-            if number in conditions:
-                continue
-            requests_used += 1
-            print(
-                f"Задание {number}/19: OCR через {MODEL}. "
-                f"Запрос OCR {requests_used}/{requests_needed}. Тайм-аут — 120 секунд...",
-                flush=True,
-            )
-            response = client.models.generate_content(
-                model=MODEL,
-                contents=[
-                    f"Номер задания: {number}",
-                    types.Part.from_bytes(
-                        data=images[number].read_bytes(), mime_type="image/png"
-                    ),
-                    PROMPT,
-                ],
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_json_schema=SCHEMA,
-                    max_output_tokens=4096,
-                ),
-            )
-            if not response.text:
-                raise ValueError(f"Задание {number}: Gemini вернул ответ без текста")
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-            raw_path = ocr_dir / f"task_{number:02d}_response_{timestamp}.txt"
-            raw_path.write_text(response.text, encoding="utf-8")
-            result = validate_conditions(json.loads(response.text), require_all=False)
-            if set(result) != {number}:
-                raise ValueError(f"Ожидалось только задание {number}, получено: {sorted(result)}")
+    if missing:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("Для недостающих страниц OCR не задана переменная GEMINI_API_KEY")
+        with genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(
+                timeout=REQUEST_TIMEOUT_MS,
+                retry_options=types.HttpRetryOptions(attempts=1),
+            ),
+        ) as client:
+            for page in missing:
+                page_num = page["page_num"]
+                requests_used += 1
+                print(
+                    f"Страница {page_num}/{len(pages)}: OCR через {MODEL}. "
+                    f"Запрос OCR {requests_used}/{len(missing)}.",
+                    flush=True,
+                )
+                try:
+                    response = client.models.generate_content(
+                        model=MODEL,
+                        contents=[
+                            f"Номер страницы: {page_num}",
+                            types.Part.from_bytes(
+                                data=page["image_path"].read_bytes(), mime_type="image/png",
+                            ),
+                            PAGE_PROMPT,
+                        ],
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            response_json_schema=SCHEMA,
+                            max_output_tokens=MAX_OUTPUT_TOKENS,
+                        ),
+                    )
+                except Exception as error:
+                    raise RuntimeError(
+                        f"Страница {page_num}: ошибка API или сети при OCR: {error}. "
+                        f"Запросов OCR: {requests_used}. Автоматических повторов нет; "
+                        "проверенные кэши страниц и прежняя выгрузка сохранены."
+                    ) from error
+                try:
+                    if not response.text:
+                        raise ValueError("Gemini вернул ответ без текста")
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                    raw_path = ocr_dir / f"page_{page_num:02d}_response_{timestamp}.txt"
+                    raw_path.write_text(response.text, encoding="utf-8")
+                    if any(
+                        getattr(getattr(candidate, "finish_reason", None), "value", None)
+                        == "MAX_TOKENS"
+                        or getattr(candidate, "finish_reason", None) == "MAX_TOKENS"
+                        for candidate in (getattr(response, "candidates", None) or ())
+                    ):
+                        raise ValueError("Gemini оборвал ответ по ограничению длины MAX_TOKENS")
+                    data = json.loads(response.text)
+                    result = validate_page_response(data, page_num, page["task_numbers"])
+                except (ValueError, TypeError) as error:
+                    raise ValueError(
+                        f"Страница {page_num}: некорректный ответ OCR: {error}. "
+                        f"Запросов OCR: {requests_used}. Дополнительный запрос не выполняется."
+                    ) from error
+                atomic_write_json(page["cache_path"], {
+                    "identity": page["identity"], "response": data,
+                    "raw_response": raw_path.name,
+                })
+                conditions.update(result)
+                print(f"Страница {page_num} проверена и сохранена.", flush=True)
 
-            conditions.update(result)
-            cached.setdefault("raw_responses", {})[str(number)] = str(
-                raw_path.relative_to(pdf_path.parent)
-            )
-            write_cache(cache_path, cached, conditions)
-            print(f"Задание {number} сохранено. Готово: {len(conditions)}/19.", flush=True)
-
-    validate_conditions(cached["tasks"])
+    # Состав каждого ответа уже совпал с номерами своей страницы. Общая
+    # проверка дополнительно требует ровно 19 разных непустых условий.
+    validate_conditions([
+        {"task_num": number, "condition": condition}
+        for number, condition in conditions.items()
+    ])
+    write_cache(cache_path, {
+        **identity,
+        "page_caches": [str(page["cache_path"].relative_to(pdf_path.parent)) for page in pages],
+    }, conditions)
     print(
-        f"OCR завершён: 19/19. Запросов OCR: {requests_used}. JSON: {cache_path}",
+        f"OCR завершён: 19/19, страниц: {len(pages)}. "
+        f"Запросов OCR: {requests_used}. JSON: {cache_path}",
         flush=True,
     )
     return conditions

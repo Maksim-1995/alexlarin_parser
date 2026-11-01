@@ -277,7 +277,7 @@ def test_semantic_prompt_change_refreshes_valid_cache_without_task_number_overri
 @pytest.mark.parametrize("bad_first", [
     "json", "unknown_exam", "parent_exam", "foreign_exam", "missing", "duplicate", "parent_topic",
 ])
-def test_invalid_contract_is_repaired_for_all_tasks_in_second_request(
+def test_invalid_contract_stops_after_one_request_without_repair(
     tasks, cache, response_items, bad_first,
 ):
     wrong = copy.deepcopy(response_items)
@@ -301,23 +301,24 @@ def test_invalid_contract_is_repaired_for_all_tasks_in_second_request(
         assert all(f'"task_num": {n}, "condition"' in prompt for n in range(1, 20))
         return first_response if len(calls) == 1 else json.dumps(response_items)
 
-    assert len(run(tasks, cache, response_items, request=request)) == 19
-    assert len(calls) == 2
-    assert "Предыдущий ответ" in calls[1]
-    assert json.loads(cache.read_text(encoding="utf-8"))["requests_used"] == 2
-
-
-def test_two_bad_responses_stop_without_saving_cache(tasks, cache, response_items):
-    calls = []
-
-    def request(prompt, *, model):
-        calls.append(prompt)
-        return "не JSON"
-
-    with pytest.raises(ValueError, match="после двух запросов"):
+    with pytest.raises(ValueError, match="после одного запроса"):
         run(tasks, cache, response_items, request=request)
-    assert len(calls) == 2
+    assert len(calls) == 1
     assert not cache.exists()
+
+
+def test_legacy_successful_cache_with_two_historical_calls_needs_no_new_request(
+    tasks, cache, response_items,
+):
+    expected = run(tasks, cache, response_items)
+    cached = json.loads(cache.read_text(encoding="utf-8"))
+    cached["requests_used"] = 2
+    cache.write_text(json.dumps(cached), encoding="utf-8")
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Исторический счётчик кэша не должен вызывать новый запрос")
+
+    assert run(tasks, cache, response_items, request=forbidden) == expected
 
 
 def test_network_error_is_clear_and_does_not_retry(tasks, cache, response_items):
@@ -637,12 +638,23 @@ def test_old_direct_parent_cache_is_rejected_even_with_current_fingerprint(
     assert replaced["tasks"][0]["exams_id"] == 180
 
 
-def test_failed_reclassification_preserves_previous_cache(tasks, cache, response_items):
+@pytest.mark.parametrize("failure", ["invalid_response", "api"])
+def test_failed_reclassification_preserves_previous_cache(tasks, cache, response_items, failure):
     run(tasks, cache, response_items)
     original = cache.read_bytes()
     tasks[0]["condition"] += " Уточнение условия."
-    with pytest.raises(ValueError, match="после двух запросов"):
-        run(tasks, cache, response_items, request=lambda *args, **kwargs: "не JSON")
+    calls = []
+
+    def request(*args, **kwargs):
+        calls.append(args)
+        if failure == "api":
+            raise TimeoutError("API недоступен")
+        return "не JSON"
+
+    error = RuntimeError if failure == "api" else ValueError
+    with pytest.raises(error, match="API|после одного запроса"):
+        run(tasks, cache, response_items, request=request)
+    assert len(calls) == 1
     assert cache.read_bytes() == original
 
 
@@ -732,7 +744,31 @@ def test_malformed_input_task_is_rejected_clearly_before_request(
         run(tasks, cache, response_items, request=unexpected)
 
 
-def test_sdk_has_one_http_attempt_and_preserves_classifier_settings(monkeypatch, response_items):
+@pytest.mark.parametrize("failure", ["missing_key", "client_initialization"])
+def test_request_counter_stays_zero_before_generate_content(monkeypatch, capsys, failure):
+    from google import genai
+
+    calls = []
+
+    def client(**kwargs):
+        calls.append(kwargs)
+        raise RuntimeError("Ошибка инициализации клиента")
+
+    monkeypatch.setattr(genai, "Client", client)
+    if failure == "missing_key":
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    else:
+        monkeypatch.setenv("GEMINI_API_KEY", "fake-test-key")
+    error = ValueError if failure == "missing_key" else RuntimeError
+    with pytest.raises(error):
+        classification.request_gemini(
+            "test", model=classification.MODEL, schema=classification.SCHEMA,
+        )
+    assert len(calls) == (0 if failure == "missing_key" else 1)
+    assert "Запросов классификации в этом запуске: 0." in capsys.readouterr().out
+
+
+def test_sdk_has_one_http_attempt_and_preserves_classifier_settings(monkeypatch, response_items, capsys):
     from google import genai
 
     options = {}
@@ -761,3 +797,4 @@ def test_sdk_has_one_http_attempt_and_preserves_classifier_settings(monkeypatch,
     assert options["http_options"].retry_options.attempts == 1
     assert calls[0]["model"] == classification.MODEL
     assert calls[0]["config"].thinking_config.thinking_level.value.lower() == classification.THINKING_LEVEL
+    assert "Запросов классификации в этом запуске: 1." in capsys.readouterr().out

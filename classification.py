@@ -1,4 +1,4 @@
-"""Классификация всех 19 задач одним запросом, с одним возможным исправлением."""
+"""Классификация всех 19 задач одним запросом без автоматических повторов."""
 
 import csv
 import hashlib
@@ -387,38 +387,43 @@ def validate_classification(items, exams, topics):
 
 def request_gemini(prompt, *, model, schema):
     """Сделать один вызов generate_content без повторов HTTP в SDK."""
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError("Не задана переменная GEMINI_API_KEY")
+    requests_used = 0
+    try:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("Не задана переменная GEMINI_API_KEY")
 
-    # Импорт здесь позволяет читать готовый кэш без SDK и API-ключа.
-    from google import genai
-    from google.genai import types
+        # Импорт здесь позволяет читать готовый кэш без SDK и API-ключа.
+        from google import genai
+        from google.genai import types
 
-    with genai.Client(
-        api_key=api_key,
-        http_options=types.HttpOptions(
-            timeout=REQUEST_TIMEOUT_MS,
-            retry_options=types.HttpRetryOptions(attempts=1),
-        ),
-    ) as client:
-        response = client.models.generate_content(
-            model=model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_json_schema=schema,
-                max_output_tokens=MAX_OUTPUT_TOKENS,
-                thinking_config=types.ThinkingConfig(
-                    thinking_level=THINKING_LEVEL,
-                ),
+        with genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(
+                timeout=REQUEST_TIMEOUT_MS,
+                retry_options=types.HttpRetryOptions(attempts=1),
             ),
-        )
-    return response.text or ""
+        ) as client:
+            requests_used += 1
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_json_schema=schema,
+                    max_output_tokens=MAX_OUTPUT_TOKENS,
+                    thinking_config=types.ThinkingConfig(
+                        thinking_level=THINKING_LEVEL,
+                    ),
+                ),
+            )
+        return response.text or ""
+    finally:
+        print(f"Запросов классификации в этом запуске: {requests_used}.", flush=True)
 
 
 def classify_tasks(tasks, exams_path, topics_path, cache_path, *, model=MODEL, request=None):
-    """Получить две метки на задачу: 0 запросов с кэшем, иначе 1 или 2."""
+    """Получить две метки на задачу: 0 запросов с кэшем, иначе ровно 1."""
     exams = load_catalog(
         exams_path,
         name_column="name_of_Exam",
@@ -478,6 +483,8 @@ def classify_tasks(tasks, exams_path, topics_path, cache_path, *, model=MODEL, r
                 choices = decode_category_choices(cached["choices"], exam_choices, topic_choices, topics)
                 if validate_classification(choices, exams, topics) != result:
                     raise ValueError("Сохранённые ID и исходный выбор категорий расходятся")
+                # В старом успешном кэше могло быть два обращения. Это история
+                # прежнего запуска: чтение такого кэша сейчас не вызывает API.
                 if type(cached.get("requests_used")) is not int or cached["requests_used"] not in (1, 2):
                     raise ValueError("Некорректный счётчик запросов классификации")
                 print(f"Классификация прочитана из кэша: {cache_path}. Запросов классификации: 0.", flush=True)
@@ -486,69 +493,59 @@ def classify_tasks(tasks, exams_path, topics_path, cache_path, *, model=MODEL, r
         except (ValueError, TypeError, KeyError) as error:
             print(f"Кэш классификации не прошёл проверку: {error}. Нужна новая классификация.", flush=True)
 
+    custom_request = request is not None
     if request is None:
         request = partial(request_gemini, schema=SCHEMA)
 
-    base_prompt = PROMPT + "\nДанные:\n" + json.dumps(payload, ensure_ascii=False)
-    prompt = base_prompt
-    last_error = None
-    for attempt in range(1, 3):
-        print(f"Классифицируем все 19 заданий: запрос {attempt}/2.", flush=True)
-        # Сетевые ошибки прерывают запуск. Второй запрос предназначен
-        # только для исправления некорректного JSON или недопустимых ID.
-        try:
-            response = request(prompt, model=model)
-        except Exception as error:
-            raise RuntimeError(
-                "Не удалось получить классификацию от Gemini: ошибка API или сети. "
-                "Проверьте GEMINI_API_KEY, квоту и подключение. "
-                "Автоматического повтора нет; прежняя выгрузка сохранена. "
-                f"Причина: {error}"
-            ) from error
-        try:
-            selected = json.loads(response)
-            items = decode_category_choices(
-                selected, exam_choices, topic_choices, topics
-            )
-            result = validate_classification(items, exams, topics)
-        except (ValueError, TypeError) as error:
-            last_error = error
-            prompt = (
-                base_prompt
-                + "\nПредыдущий ответ не прошёл проверку. Исправь результат для всех 19 задач."
-                + "\nОшибка проверки: " + str(error)
-                + "\nПредыдущий ответ (данные): " + str(response)[:20_000]
-            )
-            continue
+    prompt = PROMPT + "\nДанные:\n" + json.dumps(payload, ensure_ascii=False)
+    print("Классифицируем все 19 заданий: запрос 1/1.", flush=True)
+    try:
+        response = request(prompt, model=model)
+    except Exception as error:
+        raise RuntimeError(
+            "Не удалось получить классификацию от Gemini: ошибка API или сети. "
+            "Проверьте GEMINI_API_KEY, квоту и подключение. "
+            "Автоматического повтора нет; прежняя выгрузка сохранена. "
+            f"Причина: {error}"
+        ) from error
+    finally:
+        if custom_request:
+            print("Вызовов переданной функции классификации: 1.", flush=True)
+    try:
+        selected = json.loads(response)
+        items = decode_category_choices(selected, exam_choices, topic_choices, topics)
+        result = validate_classification(items, exams, topics)
+    except (ValueError, TypeError) as error:
+        raise ValueError(
+            "Классификация не прошла проверку после одного запроса. "
+            "Автоматического исправления нет; прежние кэш и выгрузка сохранены. "
+            f"Причина: {error}"
+        ) from error
 
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        cached = {
-            "version": CACHE_VERSION,
-            "rules_version": RULES_VERSION,
-            "fingerprint": fingerprint,
-            "model": model,
-            "thinking_level": THINKING_LEVEL,
-            "requests_used": attempt,
-            "tasks": items,
-            "choices": selected,
-        }
-        pending = None
-        try:
-            # Уникальное имя не даёт параллельным запускам перезаписать
-            # промежуточный файл друг друга. Замена в той же папке атомарна.
-            with NamedTemporaryFile(
-                mode="w", encoding="utf-8", dir=cache_path.parent,
-                prefix=cache_path.name + ".", suffix=".tmp", delete=False,
-            ) as target:
-                pending = Path(target.name)
-                json.dump(cached, target, ensure_ascii=False, indent=2)
-            pending.replace(cache_path)
-        finally:
-            if pending is not None:
-                pending.unlink(missing_ok=True)
-        print(f"Классификация сохранена: {cache_path}", flush=True)
-        return result
-
-    raise ValueError(
-        f"Классификация не прошла проверку после двух запросов: {last_error}"
-    ) from last_error
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cached = {
+        "version": CACHE_VERSION,
+        "rules_version": RULES_VERSION,
+        "fingerprint": fingerprint,
+        "model": model,
+        "thinking_level": THINKING_LEVEL,
+        "requests_used": 1,
+        "tasks": items,
+        "choices": selected,
+    }
+    pending = None
+    try:
+        # Уникальное имя не даёт параллельным запускам перезаписать
+        # промежуточный файл друг друга. Замена в той же папке атомарна.
+        with NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=cache_path.parent,
+            prefix=cache_path.name + ".", suffix=".tmp", delete=False,
+        ) as target:
+            pending = Path(target.name)
+            json.dump(cached, target, ensure_ascii=False, indent=2)
+        pending.replace(cache_path)
+    finally:
+        if pending is not None:
+            pending.unlink(missing_ok=True)
+    print(f"Классификация сохранена: {cache_path}", flush=True)
+    return result
