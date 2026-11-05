@@ -385,7 +385,7 @@ def validate_classification(items, exams, topics):
     return result
 
 
-def request_gemini(prompt, *, model, schema):
+def request_gemini(prompt, *, model, schema, request_counter=None):
     """Сделать один вызов generate_content без повторов HTTP в SDK."""
     requests_used = 0
     try:
@@ -404,25 +404,32 @@ def request_gemini(prompt, *, model, schema):
                 retry_options=types.HttpRetryOptions(attempts=1),
             ),
         ) as client:
+            config = types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_json_schema=schema,
+                max_output_tokens=MAX_OUTPUT_TOKENS,
+                thinking_config=types.ThinkingConfig(
+                    thinking_level=THINKING_LEVEL,
+                ),
+            )
+            generate_content = client.models.generate_content
             requests_used += 1
-            response = client.models.generate_content(
+            if request_counter is not None:
+                request_counter.classification += 1
+            response = generate_content(
                 model=model,
                 contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_json_schema=schema,
-                    max_output_tokens=MAX_OUTPUT_TOKENS,
-                    thinking_config=types.ThinkingConfig(
-                        thinking_level=THINKING_LEVEL,
-                    ),
-                ),
+                config=config,
             )
         return response.text or ""
     finally:
         print(f"Запросов классификации в этом запуске: {requests_used}.", flush=True)
 
 
-def classify_tasks(tasks, exams_path, topics_path, cache_path, *, model=MODEL, request=None):
+def classify_tasks(
+    tasks, exams_path, topics_path, cache_path, *, model=MODEL,
+    request=None, request_counter=None,
+):
     """Получить две метки на задачу: 0 запросов с кэшем, иначе ровно 1."""
     exams = load_catalog(
         exams_path,
@@ -495,7 +502,10 @@ def classify_tasks(tasks, exams_path, topics_path, cache_path, *, model=MODEL, r
 
     custom_request = request is not None
     if request is None:
-        request = partial(request_gemini, schema=SCHEMA)
+        options = {"schema": SCHEMA}
+        if request_counter is not None:
+            options["request_counter"] = request_counter
+        request = partial(request_gemini, **options)
 
     prompt = PROMPT + "\nДанные:\n" + json.dumps(payload, ensure_ascii=False)
     print("Классифицируем все 19 заданий: запрос 1/1.", flush=True)

@@ -71,7 +71,7 @@ def local_project(tmp_path, monkeypatch):
     return tmp_path
 
 
-def fake_classification(prompt, *, model, schema):
+def fake_classification(prompt, *, model, schema, request_counter=None):
     """Данные для проверки контракта, не математическая классификация варианта."""
     payload = json.loads(prompt.split("Данные:\n", 1)[1])
     assert len(payload["tasks"]) == 19
@@ -122,6 +122,10 @@ def install_page_gemini(local_project, monkeypatch, *, failure=None):
         def generate_content(self, *, model, contents, config):
             if isinstance(contents, str):
                 calls.append(("classification", None))
+                if state["failure"] == "classification_api":
+                    raise RuntimeError("Gemini: тестовая ошибка API классификации")
+                if state["failure"] == "classification_invalid":
+                    return SimpleNamespace(text="Некорректный JSON классификации")
                 return SimpleNamespace(text=fake_classification(
                     contents, model=model, schema=config.response_json_schema,
                 ))
@@ -144,6 +148,154 @@ def install_page_gemini(local_project, monkeypatch, *, failure=None):
     monkeypatch.setenv("GEMINI_API_KEY", "fake-test-key")
     monkeypatch.setattr(recognizer.genai, "Client", Client)
     return calls, state
+
+
+def assert_ai_summary(output, *, ocr, classification_calls, status):
+    assert output.splitlines()[-4:] == [
+        f"Запросов OCR: {ocr}",
+        f"Запросов классификации: {classification_calls}",
+        f"Всего запросов к модели: {ocr + classification_calls}",
+        f"Статус завершения: {status}",
+    ]
+
+
+def ai_cache_snapshot(input_dir):
+    paths = [
+        input_dir / "trvar542_conditions_gemini.json",
+        input_dir / "trvar542_classification.json",
+        *sorted((input_dir / "trvar542_ocr").rglob("*")),
+    ]
+    return {
+        path.relative_to(input_dir): (path.read_bytes(), path.stat().st_mtime_ns)
+        for path in paths if path.is_file()
+    }
+
+
+def observe_fresh_cache_locations(monkeypatch):
+    """Проверить изоляцию настоящих функций OCR/классификации, не подменяя их."""
+    original_ocr = main.recognize_conditions
+    original_classify = main.classify_tasks
+    locations = []
+
+    def recognize(pdf_path, *, cache_dir=None, **kwargs):
+        if cache_dir is not None:
+            root = Path(cache_dir)
+            assert root.is_dir()
+            assert not list(root.iterdir())
+            assert not root.is_relative_to(main.INPUT_DIR)
+            locations.append(root)
+        result = original_ocr(pdf_path, cache_dir=cache_dir, **kwargs)
+        if cache_dir is not None:
+            assert (root / "trvar542_conditions_gemini.json").is_file()
+            assert len(list((root / "trvar542_ocr").glob("page_*.json"))) == 3
+        return result
+
+    def classify(tasks, exams_path, topics_path, cache_path, **kwargs):
+        path = Path(cache_path)
+        if locations and path.parent == locations[-1]:
+            assert not path.exists()
+        else:
+            assert path == main.INPUT_DIR / "trvar542_classification.json"
+        return original_classify(tasks, exams_path, topics_path, cache_path, **kwargs)
+
+    monkeypatch.setattr(main, "recognize_conditions", recognize)
+    monkeypatch.setattr(main, "classify_tasks", classify)
+    return locations
+
+
+def test_fresh_ai_ignores_all_working_caches_and_ordinary_run_uses_them(
+    local_project, monkeypatch, capsys,
+):
+    calls, _ = install_page_gemini(local_project, monkeypatch)
+    main.main(main.DEFAULT_PAGE_URL)
+    assert len(calls) == 4
+    input_dir = local_project / "input"
+    cached_before = ai_cache_snapshot(input_dir)
+    sources_before = {
+        name: (input_dir / name).read_bytes()
+        for name in SOURCE_NAMES if not name.endswith("_conditions_gemini.json")
+    }
+    locations = observe_fresh_cache_locations(monkeypatch)
+    capsys.readouterr()
+
+    for run in range(2):
+        calls.clear()
+        if run == 0:
+            result = main.main(main.DEFAULT_PAGE_URL, fresh_ai=True)
+            assert (result.ocr, result.classification, result.total) == (3, 1, 4)
+        else:
+            assert main.cli(["--fresh-ai", "--url", main.DEFAULT_PAGE_URL]) == 0
+        assert calls == [("ocr", 1), ("ocr", 2), ("ocr", 3), ("classification", None)]
+        assert_ai_summary(capsys.readouterr().out, ocr=3, classification_calls=1, status="SUCCESS")
+        assert len(locations) == run + 1
+        assert not locations[-1].exists()
+        assert ai_cache_snapshot(input_dir) == cached_before
+    assert locations[0] != locations[1]
+
+    calls.clear()
+    result = main.main(main.DEFAULT_PAGE_URL)
+    assert calls == []
+    assert (result.ocr, result.classification, result.total) == (0, 0, 0)
+    assert_ai_summary(capsys.readouterr().out, ocr=0, classification_calls=0, status="SUCCESS")
+    assert ai_cache_snapshot(input_dir) == cached_before
+    assert all((input_dir / name).read_bytes() == content for name, content in sources_before.items())
+    output = local_project / "output" / "trvar542"
+    assert {path.name for path in output.iterdir()} == {"tasks.xlsx", *IMAGE_NAMES.values()}
+    with ZipFile(local_project / "trvar542_result.zip") as archive:
+        assert len(archive.namelist()) == 5
+
+
+@pytest.mark.parametrize("failure, expected_calls, expected_counts", [
+    ("api", [("ocr", 1), ("ocr", 2)], (2, 0)),
+    ("classification_api", [("ocr", 1), ("ocr", 2), ("ocr", 3), ("classification", None)], (3, 1)),
+    ("classification_invalid", [("ocr", 1), ("ocr", 2), ("ocr", 3), ("classification", None)], (3, 1)),
+])
+def test_fresh_ai_cli_failure_reports_actual_calls_and_preserves_working_files(
+    local_project, monkeypatch, capsys, failure, expected_calls, expected_counts,
+):
+    calls, state = install_page_gemini(local_project, monkeypatch)
+    main.main(main.DEFAULT_PAGE_URL)
+    input_dir = local_project / "input"
+    cached_before = ai_cache_snapshot(input_dir)
+    output = local_project / "output" / "trvar542"
+    output_before = {path.name: path.read_bytes() for path in output.iterdir()}
+    archive = local_project / "trvar542_result.zip"
+    archive_before = archive.read_bytes()
+    locations = observe_fresh_cache_locations(monkeypatch)
+    state["failure"] = failure
+    calls.clear()
+    capsys.readouterr()
+
+    assert main.cli(["--fresh-ai"]) == 1
+    assert calls == expected_calls
+    captured = capsys.readouterr()
+    assert_ai_summary(
+        captured.out, ocr=expected_counts[0], classification_calls=expected_counts[1], status="FAILED",
+    )
+    assert "SUCCESS" not in captured.out
+    assert captured.err.strip()
+    assert len(locations) == 1 and not locations[0].exists()
+    assert ai_cache_snapshot(input_dir) == cached_before
+    assert {path.name: path.read_bytes() for path in output.iterdir()} == output_before
+    assert archive.read_bytes() == archive_before
+
+
+@pytest.mark.parametrize("failure", ["missing_source", "missing_key"])
+def test_fresh_ai_cli_preflight_failure_performs_zero_model_calls(
+    local_project, monkeypatch, capsys, failure,
+):
+    calls, _ = install_page_gemini(local_project, monkeypatch)
+    if failure == "missing_source":
+        (local_project / "input" / "trvar542.png").unlink()
+    else:
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    capsys.readouterr()
+    assert main.cli(["--fresh-ai"]) == 1
+    assert calls == []
+    captured = capsys.readouterr()
+    assert_ai_summary(captured.out, ocr=0, classification_calls=0, status="FAILED")
+    assert "SUCCESS" not in captured.out
+    assert captured.err.strip()
 
 
 def test_main_without_ocr_cache_uses_three_page_calls_and_one_classification(
@@ -298,7 +450,7 @@ def test_changed_prompt_reclassifies_topics_through_main_and_reuses_both_caches(
     calls = []
     assignments = {3: 616, 11: 541, 19: 643}
 
-    def fake_response(prompt, *, model, schema):
+    def fake_response(prompt, *, model, schema, request_counter=None):
         calls.append(prompt)
         items = json.loads(fake_classification(prompt, model=model, schema=schema))
         for item in items:

@@ -284,10 +284,15 @@ def read_complete_cache(cache_path, identities):
         return None
 
 
-def recognize_conditions(pdf_path):
-    """Один вызов на отсутствующую страницу; пригодный полный кэш — ноль."""
+def recognize_conditions(pdf_path, *, cache_dir=None, request_counter=None):
+    """Один вызов на отсутствующую страницу; пригодный полный кэш — ноль.
+
+    ``cache_dir`` задаёт отдельный корень для общего и постраничных кэшей,
+    изображений и ответов OCR. Исходный PDF при этом читается по прежнему пути.
+    """
     pdf_path = Path(pdf_path)
-    cache_path = pdf_path.with_name(f"{pdf_path.stem}_conditions_gemini.json")
+    cache_root = Path(cache_dir) if cache_dir is not None else pdf_path.parent
+    cache_path = cache_root / f"{pdf_path.stem}_conditions_gemini.json"
     identity = aggregate_cache_identity(pdf_path)
     conditions = read_complete_cache(cache_path, (identity, legacy_cache_identity(pdf_path)))
     if conditions is not None:
@@ -297,7 +302,7 @@ def recognize_conditions(pdf_path):
         )
         return conditions
 
-    ocr_dir = pdf_path.parent / f"{pdf_path.stem}_ocr"
+    ocr_dir = cache_root / f"{pdf_path.stem}_ocr"
     pages = render_page_images(pdf_path, ocr_dir)
     missing = []
     conditions = {}
@@ -334,28 +339,29 @@ def recognize_conditions(pdf_path):
         ) as client:
             for page in missing:
                 page_num = page["page_num"]
-                requests_used += 1
-                print(
-                    f"Страница {page_num}/{len(pages)}: OCR через {MODEL}. "
-                    f"Запрос OCR {requests_used}/{len(missing)}.",
-                    flush=True,
-                )
                 try:
-                    response = client.models.generate_content(
-                        model=MODEL,
-                        contents=[
-                            f"Номер страницы: {page_num}",
-                            types.Part.from_bytes(
-                                data=page["image_path"].read_bytes(), mime_type="image/png",
-                            ),
-                            PAGE_PROMPT,
-                        ],
-                        config=types.GenerateContentConfig(
-                            response_mime_type="application/json",
-                            response_json_schema=SCHEMA,
-                            max_output_tokens=MAX_OUTPUT_TOKENS,
+                    contents = [
+                        f"Номер страницы: {page_num}",
+                        types.Part.from_bytes(
+                            data=page["image_path"].read_bytes(), mime_type="image/png",
                         ),
+                        PAGE_PROMPT,
+                    ]
+                    config = types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_json_schema=SCHEMA,
+                        max_output_tokens=MAX_OUTPUT_TOKENS,
                     )
+                    generate_content = client.models.generate_content
+                    requests_used += 1
+                    if request_counter is not None:
+                        request_counter.ocr += 1
+                    print(
+                        f"Страница {page_num}/{len(pages)}: OCR через {MODEL}. "
+                        f"Запрос OCR {requests_used}/{len(missing)}.",
+                        flush=True,
+                    )
+                    response = generate_content(model=MODEL, contents=contents, config=config)
                 except Exception as error:
                     raise RuntimeError(
                         f"Страница {page_num}: ошибка API или сети при OCR: {error}. "
@@ -397,7 +403,7 @@ def recognize_conditions(pdf_path):
     ])
     write_cache(cache_path, {
         **identity,
-        "page_caches": [str(page["cache_path"].relative_to(pdf_path.parent)) for page in pages],
+        "page_caches": [str(page["cache_path"].relative_to(cache_root)) for page in pages],
     }, conditions)
     print(
         f"OCR завершён: 19/19, страниц: {len(pages)}. "

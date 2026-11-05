@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 import classification
+from ai_requests import AIRequestCounter
 from classification import (
     build_category_choices,
     classify_tasks,
@@ -760,11 +761,14 @@ def test_request_counter_stays_zero_before_generate_content(monkeypatch, capsys,
     else:
         monkeypatch.setenv("GEMINI_API_KEY", "fake-test-key")
     error = ValueError if failure == "missing_key" else RuntimeError
+    counter = AIRequestCounter()
     with pytest.raises(error):
         classification.request_gemini(
             "test", model=classification.MODEL, schema=classification.SCHEMA,
+            request_counter=counter,
         )
     assert len(calls) == (0 if failure == "missing_key" else 1)
+    assert counter.total == 0
     assert "Запросов классификации в этом запуске: 0." in capsys.readouterr().out
 
 
@@ -791,10 +795,55 @@ def test_sdk_has_one_http_attempt_and_preserves_classifier_settings(monkeypatch,
 
     monkeypatch.setenv("GEMINI_API_KEY", "fake-test-key")
     monkeypatch.setattr(genai, "Client", Client)
-    classification.request_gemini("test", model=classification.MODEL, schema=classification.SCHEMA)
+    counter = AIRequestCounter(ocr=3)
+    classification.request_gemini(
+        "test", model=classification.MODEL, schema=classification.SCHEMA,
+        request_counter=counter,
+    )
     assert len(calls) == 1
+    assert counter.ocr == 3 and counter.classification == 1 and counter.total == 4
     assert options["http_options"].timeout == 120_000
     assert options["http_options"].retry_options.attempts == 1
     assert calls[0]["model"] == classification.MODEL
     assert calls[0]["config"].thinking_config.thinking_level.value.lower() == classification.THINKING_LEVEL
     assert "Запросов классификации в этом запуске: 1." in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("failure", ["request_error", "config_preparation"])
+def test_classification_counter_tracks_only_started_sdk_call(monkeypatch, failure):
+    from google import genai
+    from google.genai import types
+
+    calls = []
+
+    class Client:
+        def __init__(self, **kwargs):
+            self.models = self
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def generate_content(self, **kwargs):
+            calls.append(kwargs)
+            raise RuntimeError("Ошибка API")
+
+    def invalid_config(**kwargs):
+        raise ValueError("Ошибка параметров запроса")
+
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-test-key")
+    monkeypatch.setattr(genai, "Client", Client)
+    if failure == "config_preparation":
+        monkeypatch.setattr(types, "GenerateContentConfig", invalid_config)
+    counter = AIRequestCounter(ocr=3)
+    error = RuntimeError if failure == "request_error" else ValueError
+    with pytest.raises(error):
+        classification.request_gemini(
+            "test", model=classification.MODEL, schema=classification.SCHEMA,
+            request_counter=counter,
+        )
+    expected = 1 if failure == "request_error" else 0
+    assert len(calls) == counter.classification == expected
+    assert counter.ocr == 3 and counter.total == 3 + expected

@@ -12,15 +12,19 @@ Gemini распознаёт условия по полным изображен�
 import argparse
 import json
 import re
+import sys
+from contextlib import nullcontext
 from datetime import date, datetime
 from html import unescape
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from urllib.parse import unquote, urljoin, urlsplit
 
 import jsbeautifier
 import pymupdf
 from jsbeautifier.unpackers import UnpackingError, packer
 
+from ai_requests import AIRequestCounter
 from classification import classify_tasks
 from downloader import load_source
 from exporter import create_zip, write_excel
@@ -318,27 +322,57 @@ def validate_tasks(tasks, images_dir):
     print("Структура проверена: 19 заданий, ответы и ссылки на рисунки.")
 
 
-def main(page_url):
+def load_local_source(url, path, validate):
+    """Проверить локальный исходник для --fresh-ai без обращения к сайту."""
+    path = Path(path)
+    try:
+        data = path.read_bytes()
+        if not data:
+            raise ValueError("пустой файл")
+        result = validate(data)
+    except (OSError, ValueError) as error:
+        raise ValueError(
+            f"--fresh-ai: нет подходящего локального исходника {path} "
+            f"для {url}: {error}"
+        ) from error
+    print(f"Используем сохранённый исходник: {path}", flush=True)
+    return result
+
+
+def _run_pipeline(page_url, *, cache_dir=None, request_counter=None, local_only=False):
     """Загрузить исходники и сформировать Excel, рисунки и ZIP."""
     INPUT_DIR.mkdir(exist_ok=True)
     variant_id = Path(urlsplit(page_url).path).stem
     if not variant_id:
         raise ValueError("В ссылке отсутствует имя страницы варианта")
     output_dir = BASE_DIR / "output" / variant_id
+    source_loader = load_local_source if local_only else load_source
 
     html_path = INPUT_DIR / f"{variant_id}.html"
-    source_links = load_source(
+    source_links = source_loader(
         page_url, html_path, lambda data: parse_source_page(data, page_url)
     )
     pdf_url = source_links["pdf"]
     pdf_path = INPUT_DIR / Path(unquote(urlsplit(pdf_url).path)).name
-    full_text = load_source(
+    full_text = source_loader(
         pdf_url, pdf_path, lambda data: read_pdf_source(data, page_url)
     )
 
+    # Все обязательные исходники проверяем до первого платного вызова модели.
+    js_path = INPUT_DIR / f"{pdf_path.stem}.js"
+    readable_js, answers = source_loader(source_links["js"], js_path, read_js_source)
+    print(f"Из JavaScript извлечено ответов: {len(answers)}")
+    answer_image_url = source_links["png"]
+    answer_image_path = INPUT_DIR / f"{pdf_path.stem}.png"
+    source_loader(answer_image_url, answer_image_path, validate_answer_image)
+    extra_answers_path = INPUT_DIR / f"{pdf_path.stem}_answers.json"
+    extra_data = read_extra_answers(extra_answers_path, answer_image_url)
+
     text_path = INPUT_DIR / f"{pdf_path.stem}_raw_text.txt"
     text_path.write_text(full_text, encoding="utf-8")
-    conditions = recognize_conditions(pdf_path)
+    conditions = recognize_conditions(
+        pdf_path, cache_dir=cache_dir, request_counter=request_counter,
+    )
 
     # Регулярка проверяет нумерацию. Текст условий берём из OCR.
     tasks = parse_tasks(full_text)
@@ -353,19 +387,8 @@ def main(page_url):
     print(tasks[1]["condition"])
     print(f"Выделено заданий: {len(tasks)}")
 
-    expected_js_name = f"{pdf_path.stem}.js"
-    js_path = INPUT_DIR / expected_js_name
-    readable_js, answers = load_source(source_links["js"], js_path, read_js_source)
     unpacked_path = INPUT_DIR / f"{pdf_path.stem}_unpacked.js"
     unpacked_path.write_text(readable_js, encoding="utf-8")
-    print(f"Из JavaScript извлечено ответов: {len(answers)}")
-    answer_image_name = f"{pdf_path.stem}.png"
-    answer_image_url = source_links["png"]
-    answer_image_path = INPUT_DIR / answer_image_name
-    load_source(answer_image_url, answer_image_path, validate_answer_image)
-
-    extra_answers_path = INPUT_DIR / f"{pdf_path.stem}_answers.json"
-    extra_data = read_extra_answers(extra_answers_path, answer_image_url)
     answers.update(extra_data["answers"])
     for task in tasks:
         task["answer"] = answers.get(task["task_num"], "")
@@ -389,7 +412,9 @@ def main(page_url):
         tasks,
         BASE_DIR / "data" / "exams.csv",
         BASE_DIR / "data" / "topics.csv",
-        INPUT_DIR / f"{pdf_path.stem}_classification.json",
+        (Path(cache_dir) if cache_dir is not None else INPUT_DIR)
+        / f"{pdf_path.stem}_classification.json",
+        request_counter=request_counter,
     )
     for task in tasks:
         task.update(classifications[task["task_num"]])
@@ -412,7 +437,38 @@ def main(page_url):
     print("Условия распознаны по изображениям через Gemini. Требуется сверка с PDF.")
 
 
-if __name__ == "__main__":
+def main(page_url, *, fresh_ai=False):
+    """Выполнить сборку и сообщить число фактических вызовов модели."""
+    request_counter = AIRequestCounter()
+    status = "FAILED"
+    try:
+        context = (
+            TemporaryDirectory(prefix="alexlarin_fresh_ai_")
+            if fresh_ai else nullcontext(None)
+        )
+        with context as temporary_cache:
+            cache_dir = Path(temporary_cache) if temporary_cache is not None else None
+            if fresh_ai:
+                print(
+                    "Режим --fresh-ai: локальные исходники и отдельный временный "
+                    "каталог для OCR и классификации.",
+                    flush=True,
+                )
+            _run_pipeline(
+                page_url, cache_dir=cache_dir, request_counter=request_counter,
+                local_only=fresh_ai,
+            )
+        status = "SUCCESS"
+        return request_counter
+    finally:
+        print(f"Запросов OCR: {request_counter.ocr}", flush=True)
+        print(f"Запросов классификации: {request_counter.classification}", flush=True)
+        print(f"Всего запросов к модели: {request_counter.total}", flush=True)
+        print(f"Статус завершения: {status}", flush=True)
+
+
+def cli(argv=None):
+    """Запустить CLI; любая ошибка пайплайна даёт ненулевой код завершения."""
     parser = argparse.ArgumentParser(
         description="Сбор тренировочного варианта alexlarin.net"
     )
@@ -421,5 +477,19 @@ if __name__ == "__main__":
         default=DEFAULT_PAGE_URL,
         help="Ссылка на страницу варианта",
     )
-    args = parser.parse_args()
-    main(args.url)
+    parser.add_argument(
+        "--fresh-ai",
+        action="store_true",
+        help="Проверить число запросов с локальными исходниками и временными AI-кэшами",
+    )
+    args = parser.parse_args(argv)
+    try:
+        main(args.url, fresh_ai=args.fresh_ai)
+    except Exception as error:
+        print(f"Ошибка: {error}", file=sys.stderr, flush=True)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(cli())

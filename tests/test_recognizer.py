@@ -11,6 +11,7 @@ import pymupdf
 import pytest
 
 import recognizer
+from ai_requests import AIRequestCounter
 
 
 PAGE_NUMBERS = (list(range(1, 5)), list(range(5, 13)), list(range(13, 20)))
@@ -146,6 +147,45 @@ def test_current_complete_cache_needs_no_sdk_or_images(pdf, monkeypatch):
     assert full_cache_path(pdf).read_bytes() == before
 
 
+def test_separate_cache_root_ignores_and_preserves_working_full_and_page_caches(
+    pdf, tmp_path, monkeypatch,
+):
+    source_dir = tmp_path / "sources"
+    source_dir.mkdir()
+    original_pdf = source_dir / pdf.name
+    pdf.replace(original_pdf)
+    install_client(monkeypatch)
+    expected = recognizer.recognize_conditions(original_pdf)
+    original_files = {
+        path: path.read_bytes() for path in source_dir.rglob("*") if path.is_file()
+    }
+    cache_dir = tmp_path / "isolated-ai-cache"
+    client, _ = install_client(monkeypatch)
+    counter = AIRequestCounter()
+    result = recognizer.recognize_conditions(
+        original_pdf, cache_dir=cache_dir, request_counter=counter,
+    )
+    assert result == expected
+    assert client.models.generate_content.call_count == counter.ocr == 3
+    assert counter.classification == 0 and counter.total == 3
+    assert all(path.read_bytes() == data for path, data in original_files.items())
+    assert {path for path in source_dir.rglob("*") if path.is_file()} == set(original_files)
+    aggregate = json.loads(
+        (cache_dir / "variant_conditions_gemini.json").read_text(encoding="utf-8")
+    )
+    assert aggregate["page_caches"] == [
+        f"variant_ocr/page_{number:02d}.json" for number in range(1, 4)
+    ]
+    assert all((cache_dir / name).is_file() for name in aggregate["page_caches"])
+
+    forbid_client(monkeypatch)
+    cached_counter = AIRequestCounter()
+    assert recognizer.recognize_conditions(
+        original_pdf, cache_dir=cache_dir, request_counter=cached_counter,
+    ) == expected
+    assert cached_counter.total == 0
+
+
 def test_page_caches_rebuild_missing_aggregate_without_key_or_api(pdf, monkeypatch, capsys):
     install_client(monkeypatch)
     expected = recognizer.recognize_conditions(pdf)
@@ -167,10 +207,12 @@ def test_api_failure_keeps_checked_page_and_resume_requests_only_missing_pages(p
         return SimpleNamespace(text=json.dumps(response_for(page_num)))
 
     client, _ = install_client(monkeypatch, fail_second)
+    counter = AIRequestCounter()
     with pytest.raises(RuntimeError, match="Страница 2.*Автоматических повторов нет"):
-        recognizer.recognize_conditions(pdf)
+        recognizer.recognize_conditions(pdf, request_counter=counter)
     assert requested == [1, 2]
     assert client.models.generate_content.call_count == 2
+    assert counter.ocr == counter.total == 2
     first = page_cache_path(pdf, 1).read_bytes()
     assert not page_cache_path(pdf, 2).exists()
     assert not full_cache_path(pdf).exists()
@@ -191,9 +233,11 @@ def test_api_failure_keeps_checked_page_and_resume_requests_only_missing_pages(p
 def test_invalid_page_response_stops_without_automatic_repair(pdf, monkeypatch, invalid):
     text = invalid if isinstance(invalid, str) else json.dumps(invalid)
     client, _ = install_client(monkeypatch, lambda **request: SimpleNamespace(text=text))
+    counter = AIRequestCounter()
     with pytest.raises(ValueError, match="Страница 1.*Дополнительный запрос не выполняется"):
-        recognizer.recognize_conditions(pdf)
+        recognizer.recognize_conditions(pdf, request_counter=counter)
     assert client.models.generate_content.call_count == 1
+    assert counter.ocr == counter.total == 1
     assert not page_cache_path(pdf, 1).exists()
     assert not full_cache_path(pdf).exists()
 
@@ -281,10 +325,30 @@ def test_missing_key_preserves_old_partial_legacy_cache(pdf, monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     client = MagicMock()
     monkeypatch.setattr(recognizer.genai, "Client", client)
+    counter = AIRequestCounter()
     with pytest.raises(ValueError, match="GEMINI_API_KEY"):
-        recognizer.recognize_conditions(pdf)
+        recognizer.recognize_conditions(pdf, request_counter=counter)
     client.assert_not_called()
+    assert counter.total == 0
     assert full_cache_path(pdf).read_bytes() == before
+
+
+@pytest.mark.parametrize("failure", ["client_initialization", "image_preparation"])
+def test_counter_stays_zero_when_ocr_request_cannot_be_prepared(pdf, monkeypatch, failure):
+    client, _ = install_client(monkeypatch)
+    counter = AIRequestCounter()
+
+    def fail(**kwargs):
+        raise ValueError("Ошибка подготовки запроса")
+
+    if failure == "client_initialization":
+        monkeypatch.setattr(recognizer.genai, "Client", fail)
+    else:
+        monkeypatch.setattr(recognizer.types.Part, "from_bytes", fail)
+    with pytest.raises((ValueError, RuntimeError), match="Ошибка подготовки запроса"):
+        recognizer.recognize_conditions(pdf, request_counter=counter)
+    client.models.generate_content.assert_not_called()
+    assert counter.total == 0
 
 
 def test_atomic_page_cache_failure_preserves_old_file_and_cleans_pending(pdf, monkeypatch):
