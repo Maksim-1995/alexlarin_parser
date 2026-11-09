@@ -21,4 +21,6 @@ __pycache__/
 /output/*
 !/output/.gitkeep
 /*_result.zip
+/archives/
+/reports/
 *.bak

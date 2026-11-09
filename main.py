@@ -1,12 +1,7 @@
-"""Собирает вариант alexlarin.net в Excel и сохраняет рисунки заданий.
+"""CLI одиночной и пакетной обработки через прямой DeepSeek.
 
-Исходники и промежуточные файлы находятся в input/.
-В output/<variant_id>/ сохраняются только tasks.xlsx и рисунки заданий.
-ZIP создаётся рядом с main.py.
-
-PyMuPDF находит номера заданий и встроенные рисунки.
-Gemini распознаёт условия по полным изображениям страниц с разрешением 300 dpi.
-Перед записью в Excel обозначения оформляются в LaTeX регулярными выражениями.
+Общий поток реализован в pipeline.py. Ниже сохранены прежние чистые функции
+разбора и проверки источников 542 для совместимости и локальной регрессии.
 """
 
 import argparse
@@ -25,13 +20,12 @@ import pymupdf
 from jsbeautifier.unpackers import UnpackingError, packer
 
 from ai_requests import AIRequestCounter
-from classification import classify_tasks
 from downloader import load_source
 from exporter import create_zip, write_excel
 from export_metadata import prepare_about_metadata
 from latex_format import normalize_condition
 from parsers import parse_js_answers, parse_tasks
-from recognizer import DPI, METHOD, MODEL, get_task_positions, recognize_conditions
+from recognizer import get_task_positions
 from task_html import add_subtask_breaks
 
 
@@ -339,156 +333,46 @@ def load_local_source(url, path, validate):
     return result
 
 
-def _run_pipeline(page_url, *, cache_dir=None, request_counter=None, local_only=False):
-    """Загрузить исходники и сформировать Excel, рисунки и ZIP."""
-    INPUT_DIR.mkdir(exist_ok=True)
-    variant_id = Path(urlsplit(page_url).path).stem
-    if not variant_id:
-        raise ValueError("В ссылке отсутствует имя страницы варианта")
-    output_dir = BASE_DIR / "output" / variant_id
-    source_loader = load_local_source if local_only else load_source
-
-    html_path = INPUT_DIR / f"{variant_id}.html"
-    source_links = source_loader(
-        page_url, html_path, lambda data: parse_source_page(data, page_url)
-    )
-    pdf_url = source_links["pdf"]
-    pdf_path = INPUT_DIR / Path(unquote(urlsplit(pdf_url).path)).name
-    full_text = source_loader(
-        pdf_url, pdf_path, lambda data: read_pdf_source(data, page_url)
-    )
-
-    # Все обязательные исходники проверяем до первого платного вызова модели.
-    js_path = INPUT_DIR / f"{pdf_path.stem}.js"
-    readable_js, answers = source_loader(source_links["js"], js_path, read_js_source)
-    print(f"Из JavaScript извлечено ответов: {len(answers)}")
-    answer_image_url = source_links["png"]
-    answer_image_path = INPUT_DIR / f"{pdf_path.stem}.png"
-    source_loader(answer_image_url, answer_image_path, validate_answer_image)
-    extra_answers_path = INPUT_DIR / f"{pdf_path.stem}_answers.json"
-    extra_data = read_extra_answers(extra_answers_path, answer_image_url)
-
-    text_path = INPUT_DIR / f"{pdf_path.stem}_raw_text.txt"
-    text_path.write_text(full_text, encoding="utf-8")
-    conditions = recognize_conditions(
-        pdf_path, cache_dir=cache_dir, request_counter=request_counter,
-    )
-
-    # Регулярка проверяет нумерацию. Текст условий берём из OCR.
-    tasks = parse_tasks(full_text)
-    for task in tasks:
-        number = task["task_num"]
-        try:
-            task["condition"] = normalize_condition(conditions[number])
-        except ValueError as error:
-            raise ValueError(f"Задание {number}: {error}") from error
-
-    print("\nЗадание 2 после распознавания:")
-    print(tasks[1]["condition"])
-    print(f"Выделено заданий: {len(tasks)}")
-
-    unpacked_path = INPUT_DIR / f"{pdf_path.stem}_unpacked.js"
-    unpacked_path.write_text(readable_js, encoding="utf-8")
-    answers.update(extra_data["answers"])
-    for task in tasks:
-        task["answer"] = answers.get(task["task_num"], "")
-    print(f"Всего ответов: {len(answers)}")
-
-    metadata = parse_metadata(full_text, page_url, date.today())
-    metadata["answers_13_19_method"] = extra_data["method"]
-    metadata["answers_13_19_source"] = extra_data["source_url"]
-    metadata["conditions_method"] = METHOD
-    metadata["conditions_model"] = MODEL
-    metadata["conditions_dpi"] = DPI
-    metadata["conditions_format"] = "LaTeX для отображения через MathJax"
-    metadata["conditions_cache_format"] = "LaTeX"
-    metadata["formula_notation"] = (
-        "$...$ — формула внутри текста; "
-        "$$...$$ — отдельная формула"
-    )
-    metadata["conditions_source"] = pdf_url
-
-    classifications = classify_tasks(
-        tasks,
-        BASE_DIR / "data" / "exams.csv",
-        BASE_DIR / "data" / "topics.csv",
-        (Path(cache_dir) if cache_dir is not None else INPUT_DIR)
-        / f"{pdf_path.stem}_classification.json",
-        request_counter=request_counter,
-    )
-    for task in tasks:
-        task.update(classifications[task["task_num"]])
-        task["condition"] = add_subtask_breaks(task["condition"])
-        task["answer"] = add_subtask_breaks(task["answer"])
-    print(f"Классификация получена для {len(classifications)} заданий.")
-
-    images_dir = prepare_output_dir(output_dir)
-    extract_task_images(pdf_path, tasks, images_dir)
-    validate_tasks(tasks, images_dir)
-
-    excel_path = output_dir / "tasks.xlsx"
-    write_excel(tasks, prepare_about_metadata(metadata), excel_path)
-    print(f"Excel сохранён: {excel_path}")
-
-    archive_path = BASE_DIR / f"{pdf_path.stem}_result.zip"
-    file_count = create_zip(excel_path, images_dir, archive_path)
-    print(f"Архив сохранён вне output: {archive_path}")
-    print(f"Файлов в архиве: {file_count}")
-    print("Условия распознаны по изображениям через Gemini. Требуется сверка с PDF.")
-
-
-def main(page_url, *, fresh_ai=False):
-    """Выполнить сборку и сообщить число фактических вызовов модели."""
-    request_counter = AIRequestCounter()
-    status = "FAILED"
-    try:
-        context = (
-            TemporaryDirectory(prefix="alexlarin_fresh_ai_")
-            if fresh_ai else nullcontext(None)
-        )
-        with context as temporary_cache:
-            cache_dir = Path(temporary_cache) if temporary_cache is not None else None
-            if fresh_ai:
-                print(
-                    "Режим --fresh-ai: локальные исходники и отдельный временный "
-                    "каталог для OCR и классификации.",
-                    flush=True,
-                )
-            _run_pipeline(
-                page_url, cache_dir=cache_dir, request_counter=request_counter,
-                local_only=fresh_ai,
-            )
-        status = "SUCCESS"
-        return request_counter
-    finally:
-        print(f"Запросов OCR: {request_counter.ocr}", flush=True)
-        print(f"Запросов классификации: {request_counter.classification}", flush=True)
-        print(f"Всего запросов к модели: {request_counter.total}", flush=True)
-        print(f"Статус завершения: {status}", flush=True)
+def main(page_url=DEFAULT_PAGE_URL, *, fresh_ai=False, local_only=False):
+    """Одиночный запуск через тот же изолированный поток, что и пакет."""
+    from pipeline import run_batch
+    from variant_sources import VariantContext
+    return run_batch(BASE_DIR, [VariantContext.from_url(page_url, BASE_DIR)],
+                     fresh_ai=fresh_ai, local_only=local_only)
 
 
 def cli(argv=None):
-    """Запустить CLI; любая ошибка пайплайна даёт ненулевой код завершения."""
-    parser = argparse.ArgumentParser(
-        description="Сбор тренировочного варианта alexlarin.net"
-    )
-    parser.add_argument(
-        "--url",
-        default=DEFAULT_PAGE_URL,
-        help="Ссылка на страницу варианта",
-    )
-    parser.add_argument(
-        "--fresh-ai",
-        action="store_true",
-        help="Проверить число запросов с локальными исходниками и временными AI-кэшами",
-    )
+    """План — без AI; платный пакет ограничен явным выбором и размером."""
+    from pipeline import parse_selection, plan_run, run_batch, selected_contexts
+    parser = argparse.ArgumentParser(description="Изолированный парсер вариантов alexlarin.net")
+    choice = parser.add_mutually_exclusive_group()
+    choice.add_argument("--url", help="Страница одного варианта; по умолчанию прежний №542")
+    choice.add_argument("--batch", help="Основные номера из реальных href архива: 1-5 либо 1,2,3")
+    choice.add_argument("--resume", type=Path, help="Манифест предыдущего запуска reports/<run_id>/manifest.json")
+    parser.add_argument("--plan", action="store_true", help="Показать выбор и пути без платных вызовов")
+    parser.add_argument("--fresh-ai", action="store_true", help="Изолированные новые AI-кэши, прежние сохраняются")
+    parser.add_argument("--local-only", action="store_true", help="Использовать только проверенные локальные исходники")
+    parser.add_argument("--max-variants", type=int, default=5, help="Предохранитель размера платного пакета (по умолчанию 5)")
     args = parser.parse_args(argv)
     try:
-        main(args.url, fresh_ai=args.fresh_ai)
+        numbers = parse_selection(args.batch) if args.batch else None
+        contexts = selected_contexts(BASE_DIR, numbers=numbers,
+                                     url=args.url or (DEFAULT_PAGE_URL if not args.batch and not args.resume else None),
+                                     resume=args.resume, local_only=args.local_only)
+        if args.plan:
+            print(json.dumps(plan_run(BASE_DIR, contexts), ensure_ascii=False, indent=2))
+            return 0
+        if args.max_variants <= 0 or len(contexts) > args.max_variants:
+            raise ValueError("Размер пакета превышает --max-variants; сначала проверьте --plan")
+        result = run_batch(BASE_DIR, contexts, fresh_ai=args.fresh_ai,
+                           local_only=args.local_only, resume_from=args.resume)
+        return {"SUCCESS": 0, "NEEDS_REVIEW": 2, "FAILED": 1}[result["status"]]
+    except KeyboardInterrupt:
+        print("Запуск прерван; проверенные страницы и отчёт сохранены", file=sys.stderr)
+        return 130
     except Exception as error:
         print(f"Ошибка: {error}", file=sys.stderr, flush=True)
         return 1
-    return 0
 
 
 if __name__ == "__main__":

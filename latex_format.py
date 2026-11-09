@@ -53,6 +53,7 @@ def normalize_condition(condition):
         # Например: «равен10» -> «равен 10».
         text = re.sub(r"([а-яё]{2,})(?=\d)", r"\1 ", text)
         text = TOKEN_RE.sub(_wrap_token, text)
+        text = re.sub(r"[ \t\u00a0]+", " ", text)
         text = re.sub(r"[ \t]+([.,;:!?])", r"\1", text)
         parts[index] = text
 

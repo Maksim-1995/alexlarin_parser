@@ -1,6 +1,7 @@
 """Экспорт заданий в Excel и ZIP-архив с изображениями."""
 
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from openpyxl import Workbook
@@ -145,7 +146,7 @@ def format_excel(workbook):
     about_sheet.row_dimensions[2].height = 90
 
 
-def create_zip(excel_path, images_dir, archive_path):
+def create_zip(excel_path, images_dir, archive_path, *, image_files=None):
     """Создать ZIP-архив и проверить целостность записанных файлов.
 
     Книга сохраняется в архиве как ``tasks.xlsx``. Рисунки добавляются
@@ -173,28 +174,48 @@ def create_zip(excel_path, images_dir, archive_path):
     images_dir = Path(images_dir)
     archive_path = Path(archive_path)
     excluded_paths = {excel_path.resolve(), archive_path.resolve()}
+    # Старый публичный API оставлен для проверенной выгрузки 542.
+    # Новый пакетный путь всегда передаёт явный список итоговых рисунков.
+    candidates = images_dir.iterdir() if image_files is None else image_files
+    images = []
+    names = {"tasks.xlsx"}
+    for candidate in candidates:
+        image_path = Path(candidate)
+        if not image_path.is_absolute() and image_path.parent == Path("."):
+            image_path = images_dir / image_path
+        if image_path.resolve() in excluded_paths:
+            continue
+        if image_files is None and not image_path.is_file():
+            continue
+        if image_path.resolve().parent != images_dir.resolve():
+            raise ValueError(f"Рисунок вне папки данного варианта: {image_path}")
+        if not image_path.is_file():
+            raise FileNotFoundError(image_path)
+        if image_path.name in names:
+            raise ValueError(f"Повторное имя в ZIP: {image_path.name}")
+        names.add(image_path.name)
+        images.append(image_path)
 
-    with ZipFile(
-        archive_path,
-        mode="w",
-        compression=ZIP_DEFLATED,
-    ) as archive:
-        archive.write(excel_path, arcname="tasks.xlsx")
+    archive_path.parent.mkdir(parents=True, exist_ok=True)
+    pending = None
+    try:
+        with NamedTemporaryFile(
+            dir=archive_path.parent, prefix=archive_path.name + ".", suffix=".tmp", delete=False,
+        ) as target:
+            pending = Path(target.name)
+        with ZipFile(pending, mode="w", compression=ZIP_DEFLATED) as archive:
+            archive.write(excel_path, arcname="tasks.xlsx")
+            for image_path in sorted(images):
+                archive.write(image_path, arcname=image_path.name)
 
-        for image_path in sorted(images_dir.iterdir()):
-            if image_path.is_file() and image_path.resolve() not in excluded_paths:
-                archive.write(
-                    image_path,
-                    arcname=image_path.name,
-                )
-
-    # Проверяем целостность записанных файлов.
-    with ZipFile(archive_path, mode="r") as archive:
-        damaged_file = archive.testzip()
-
-        if damaged_file is not None:
-            raise ValueError(
-                f"В архиве повреждён файл: {damaged_file}"
-            )
-
-        return len(archive.namelist())
+        with ZipFile(pending, mode="r") as archive:
+            damaged_file = archive.testzip()
+            if damaged_file is not None:
+                raise ValueError(f"В архиве повреждён файл: {damaged_file}")
+            if len(archive.namelist()) != len(names) or set(archive.namelist()) != names:
+                raise ValueError("Состав ZIP не совпадает со списком итоговых файлов")
+        pending.replace(archive_path)
+        return len(names)
+    finally:
+        if pending is not None:
+            pending.unlink(missing_ok=True)

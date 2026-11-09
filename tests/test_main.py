@@ -1,7 +1,7 @@
-"""Сборка реального варианта из input/; классификация в тестах подменяется.
+"""CLI DeepSeek и сохранённые проверки чистых функций источников 542.
 
-Результаты создаются исключительно во временной папке pytest. Если сохранённые
-исходники не предоставлены вместе с клоном, интеграционные проверки пропускаются.
+Постраничные интеграции нового потока находятся в test_pipeline.py и
+ test_variant_ocr.py; обычные тесты не обращаются к платным API.
 """
 
 import csv
@@ -71,465 +71,43 @@ def local_project(tmp_path, monkeypatch):
     return tmp_path
 
 
-def fake_classification(prompt, *, model, schema, request_counter=None):
-    """Данные для проверки контракта, не математическая классификация варианта."""
-    payload = json.loads(prompt.split("Данные:\n", 1)[1])
-    assert len(payload["tasks"]) == 19
-    assert EXAM_LABEL in payload["exams"]
-    assert "E | Вектор" not in payload["exams"]
-    return json.dumps([
-        {
-            "task_num": number,
-            "exam_choice": EXAM_LABEL,
-            "topic_kind": "new" if number == 8 else "existing",
-            "topic_choice": NEW_TOPIC if number == 8 else TOPIC_LABEL,
-        }
-        for number in range(1, 20)
-    ], ensure_ascii=False)
+def test_plan_cli_never_constructs_provider(tmp_path, monkeypatch, capsys):
+    import pipeline
+    from variant_sources import VariantContext
+    monkeypatch.setattr(main, "BASE_DIR", tmp_path)
+    monkeypatch.setattr(pipeline, "DeepSeekClient", lambda *a, **kw: pytest.fail("План не вызывает AI"))
+    url = "https://alexlarin.net/ege/2013/trvar1.html"
+    assert main.cli(["--plan", "--url", url]) == 0
+    plan = json.loads(capsys.readouterr().out)
+    assert plan["paid_calls"] == 0
+    assert plan["variants"][0]["variant_key"] == "ege_2013_trvar1"
+    assert not (tmp_path / "output").exists()
 
 
-def install_page_gemini(local_project, monkeypatch, *, failure=None):
-    """Подменить SDK, сохранив реальную постраничную реализацию main/OCR.
-
-    Условия берутся из предоставленного OCR-кэша только как данные ответа
-    тестовой подмены. Сам кэш во временной папке удаляется перед запуском.
-    """
-    input_dir = local_project / "input"
-    full_cache = input_dir / "trvar542_conditions_gemini.json"
-    conditions = recognizer.validate_conditions(json.loads(full_cache.read_text(encoding="utf-8"))["tasks"])
-    full_cache.unlink()
-    with pymupdf.open(input_dir / "trvar542.pdf") as document:
-        page_tasks = {
-            index: sorted(position["task_num"] for position in recognizer.get_task_positions(page))
-            for index, page in enumerate(document, start=1)
-        }
-    # Проверка текущего примера, не правило распознавания любого PDF.
-    assert page_tasks == {1: list(range(1, 5)), 2: list(range(5, 13)), 3: list(range(13, 20))}
-    calls = []
-    state = {"failure": failure}
-
-    class Client:
-        def __init__(self, **kwargs):
-            assert kwargs["http_options"].retry_options.attempts == 1
-            self.models = self
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-        def generate_content(self, *, model, contents, config):
-            if isinstance(contents, str):
-                calls.append(("classification", None))
-                if state["failure"] == "classification_api":
-                    raise RuntimeError("Gemini: тестовая ошибка API классификации")
-                if state["failure"] == "classification_invalid":
-                    return SimpleNamespace(text="Некорректный JSON классификации")
-                return SimpleNamespace(text=fake_classification(
-                    contents, model=model, schema=config.response_json_schema,
-                ))
-            page_num = int(contents[0].rsplit(" ", 1)[1])
-            assert contents[1].inline_data.mime_type == "image/png"
-            assert contents[1].inline_data.data.startswith(b"\x89PNG\r\n\x1a\n")
-            calls.append(("ocr", page_num))
-            if page_num == 2 and state["failure"] == "api":
-                raise RuntimeError("Gemini: тестовая ошибка API страницы 2")
-            if page_num == 2 and state["failure"] == "invalid_response":
-                return SimpleNamespace(text="Некорректный JSON страницы")
-            return SimpleNamespace(text=json.dumps({
-                "page_num": page_num,
-                "tasks": [
-                    {"task_num": number, "condition": conditions[number]}
-                    for number in page_tasks[page_num]
-                ],
-            }, ensure_ascii=False))
-
-    monkeypatch.setenv("GEMINI_API_KEY", "fake-test-key")
-    monkeypatch.setattr(recognizer.genai, "Client", Client)
-    return calls, state
+@pytest.mark.parametrize("status,code", [("SUCCESS",0),("NEEDS_REVIEW",2),("FAILED",1)])
+def test_cli_routes_single_batch_and_resume_through_same_pipeline(tmp_path, monkeypatch, status, code):
+    import pipeline
+    from variant_sources import VariantContext
+    seen = []
+    contexts = [VariantContext.from_url("https://alexlarin.net/ege/2013/trvar1.html", tmp_path)]
+    monkeypatch.setattr(pipeline, "selected_contexts", lambda *a, **kw: contexts)
+    def run(base_dir, actual, **kwargs):
+        seen.append((actual, kwargs))
+        return {"status": status}
+    monkeypatch.setattr(pipeline, "run_batch", run)
+    assert main.cli(["--batch", "1-5", "--fresh-ai", "--local-only"]) == code
+    assert seen[0][0] == contexts
+    assert seen[0][1]["fresh_ai"] is True
+    assert seen[0][1]["local_only"] is True
 
 
-def assert_ai_summary(output, *, ocr, classification_calls, status):
-    assert output.splitlines()[-4:] == [
-        f"Запросов OCR: {ocr}",
-        f"Запросов классификации: {classification_calls}",
-        f"Всего запросов к модели: {ocr + classification_calls}",
-        f"Статус завершения: {status}",
-    ]
-
-
-def ai_cache_snapshot(input_dir):
-    paths = [
-        input_dir / "trvar542_conditions_gemini.json",
-        input_dir / "trvar542_classification.json",
-        *sorted((input_dir / "trvar542_ocr").rglob("*")),
-    ]
-    return {
-        path.relative_to(input_dir): (path.read_bytes(), path.stat().st_mtime_ns)
-        for path in paths if path.is_file()
-    }
-
-
-def observe_fresh_cache_locations(monkeypatch):
-    """Проверить изоляцию настоящих функций OCR/классификации, не подменяя их."""
-    original_ocr = main.recognize_conditions
-    original_classify = main.classify_tasks
-    locations = []
-
-    def recognize(pdf_path, *, cache_dir=None, **kwargs):
-        if cache_dir is not None:
-            root = Path(cache_dir)
-            assert root.is_dir()
-            assert not list(root.iterdir())
-            assert not root.is_relative_to(main.INPUT_DIR)
-            locations.append(root)
-        result = original_ocr(pdf_path, cache_dir=cache_dir, **kwargs)
-        if cache_dir is not None:
-            assert (root / "trvar542_conditions_gemini.json").is_file()
-            assert len(list((root / "trvar542_ocr").glob("page_*.json"))) == 3
-        return result
-
-    def classify(tasks, exams_path, topics_path, cache_path, **kwargs):
-        path = Path(cache_path)
-        if locations and path.parent == locations[-1]:
-            assert not path.exists()
-        else:
-            assert path == main.INPUT_DIR / "trvar542_classification.json"
-        return original_classify(tasks, exams_path, topics_path, cache_path, **kwargs)
-
-    monkeypatch.setattr(main, "recognize_conditions", recognize)
-    monkeypatch.setattr(main, "classify_tasks", classify)
-    return locations
-
-
-def test_fresh_ai_ignores_all_working_caches_and_ordinary_run_uses_them(
-    local_project, monkeypatch, capsys,
-):
-    calls, _ = install_page_gemini(local_project, monkeypatch)
-    main.main(main.DEFAULT_PAGE_URL)
-    assert len(calls) == 4
-    input_dir = local_project / "input"
-    cached_before = ai_cache_snapshot(input_dir)
-    sources_before = {
-        name: (input_dir / name).read_bytes()
-        for name in SOURCE_NAMES if not name.endswith("_conditions_gemini.json")
-    }
-    locations = observe_fresh_cache_locations(monkeypatch)
-    capsys.readouterr()
-
-    for run in range(2):
-        calls.clear()
-        if run == 0:
-            result = main.main(main.DEFAULT_PAGE_URL, fresh_ai=True)
-            assert (result.ocr, result.classification, result.total) == (3, 1, 4)
-        else:
-            assert main.cli(["--fresh-ai", "--url", main.DEFAULT_PAGE_URL]) == 0
-        assert calls == [("ocr", 1), ("ocr", 2), ("ocr", 3), ("classification", None)]
-        assert_ai_summary(capsys.readouterr().out, ocr=3, classification_calls=1, status="SUCCESS")
-        assert len(locations) == run + 1
-        assert not locations[-1].exists()
-        assert ai_cache_snapshot(input_dir) == cached_before
-    assert locations[0] != locations[1]
-
-    calls.clear()
-    result = main.main(main.DEFAULT_PAGE_URL)
-    assert calls == []
-    assert (result.ocr, result.classification, result.total) == (0, 0, 0)
-    assert_ai_summary(capsys.readouterr().out, ocr=0, classification_calls=0, status="SUCCESS")
-    assert ai_cache_snapshot(input_dir) == cached_before
-    assert all((input_dir / name).read_bytes() == content for name, content in sources_before.items())
-    output = local_project / "output" / "trvar542"
-    assert {path.name for path in output.iterdir()} == {"tasks.xlsx", *IMAGE_NAMES.values()}
-    with ZipFile(local_project / "trvar542_result.zip") as archive:
-        assert len(archive.namelist()) == 5
-
-
-@pytest.mark.parametrize("failure, expected_calls, expected_counts", [
-    ("api", [("ocr", 1), ("ocr", 2)], (2, 0)),
-    ("classification_api", [("ocr", 1), ("ocr", 2), ("ocr", 3), ("classification", None)], (3, 1)),
-    ("classification_invalid", [("ocr", 1), ("ocr", 2), ("ocr", 3), ("classification", None)], (3, 1)),
-])
-def test_fresh_ai_cli_failure_reports_actual_calls_and_preserves_working_files(
-    local_project, monkeypatch, capsys, failure, expected_calls, expected_counts,
-):
-    calls, state = install_page_gemini(local_project, monkeypatch)
-    main.main(main.DEFAULT_PAGE_URL)
-    input_dir = local_project / "input"
-    cached_before = ai_cache_snapshot(input_dir)
-    output = local_project / "output" / "trvar542"
-    output_before = {path.name: path.read_bytes() for path in output.iterdir()}
-    archive = local_project / "trvar542_result.zip"
-    archive_before = archive.read_bytes()
-    locations = observe_fresh_cache_locations(monkeypatch)
-    state["failure"] = failure
-    calls.clear()
-    capsys.readouterr()
-
-    assert main.cli(["--fresh-ai"]) == 1
-    assert calls == expected_calls
-    captured = capsys.readouterr()
-    assert_ai_summary(
-        captured.out, ocr=expected_counts[0], classification_calls=expected_counts[1], status="FAILED",
-    )
-    assert "SUCCESS" not in captured.out
-    assert captured.err.strip()
-    assert len(locations) == 1 and not locations[0].exists()
-    assert ai_cache_snapshot(input_dir) == cached_before
-    assert {path.name: path.read_bytes() for path in output.iterdir()} == output_before
-    assert archive.read_bytes() == archive_before
-
-
-@pytest.mark.parametrize("failure", ["missing_source", "missing_key"])
-def test_fresh_ai_cli_preflight_failure_performs_zero_model_calls(
-    local_project, monkeypatch, capsys, failure,
-):
-    calls, _ = install_page_gemini(local_project, monkeypatch)
-    if failure == "missing_source":
-        (local_project / "input" / "trvar542.png").unlink()
-    else:
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    capsys.readouterr()
-    assert main.cli(["--fresh-ai"]) == 1
-    assert calls == []
-    captured = capsys.readouterr()
-    assert_ai_summary(captured.out, ocr=0, classification_calls=0, status="FAILED")
-    assert "SUCCESS" not in captured.out
-    assert captured.err.strip()
-
-
-def test_main_without_ocr_cache_uses_three_page_calls_and_one_classification(
-    local_project, monkeypatch,
-):
-    original_sources = {
-        name: (local_project / "input" / name).read_bytes()
-        for name in SOURCE_NAMES if not name.endswith("_conditions_gemini.json")
-    }
-    calls, _ = install_page_gemini(local_project, monkeypatch)
-    main.main(main.DEFAULT_PAGE_URL)
-    assert calls == [("ocr", 1), ("ocr", 2), ("ocr", 3), ("classification", None)]
-    input_dir = local_project / "input"
-    assert all((input_dir / "trvar542_ocr" / f"page_{number:02d}.json").is_file()
-               for number in range(1, 4))
-    combined = json.loads((input_dir / "trvar542_conditions_gemini.json").read_text(encoding="utf-8"))
-    assert [item["task_num"] for item in combined["tasks"]] == list(range(1, 20))
-
-    def forbidden(*args, **kwargs):
-        pytest.fail("С актуальными кэшами OCR и классификации вызовы SDK запрещены")
-
-    monkeypatch.setattr(recognizer.genai, "Client", forbidden)
-    main.main(main.DEFAULT_PAGE_URL)
-    assert len(calls) == 4
-    assert all((input_dir / name).read_bytes() == content for name, content in original_sources.items())
-    output = local_project / "output" / "trvar542"
-    expected = {"tasks.xlsx", *IMAGE_NAMES.values()}
-    assert {path.name for path in output.iterdir()} == expected
-    with ZipFile(local_project / "trvar542_result.zip") as archive:
-        assert len(archive.namelist()) == 5 and set(archive.namelist()) == expected
-
-
-@pytest.mark.parametrize("failure", ["api", "invalid_response"])
-def test_main_page_failure_keeps_verified_page_and_previous_output_then_resumes(
-    local_project, monkeypatch, failure,
-):
-    # Создаём прежнюю успешную выгрузку из пригодного полного legacy-кэша.
-    monkeypatch.setattr(classification, "request_gemini", fake_classification)
-    main.main(main.DEFAULT_PAGE_URL)
-    output = local_project / "output" / "trvar542"
-    before = {path.name: path.read_bytes() for path in output.iterdir()}
-    archive = local_project / "trvar542_result.zip"
-    previous_archive = archive.read_bytes()
-    calls, state = install_page_gemini(local_project, monkeypatch, failure=failure)
-    with pytest.raises((RuntimeError, ValueError), match="страниц|Страниц|API"):
-        main.main(main.DEFAULT_PAGE_URL)
-    assert calls == [("ocr", 1), ("ocr", 2)]
-    page_cache = local_project / "input" / "trvar542_ocr" / "page_01.json"
-    verified_page = page_cache.read_bytes()
-    assert not page_cache.with_name("page_02.json").exists()
-    assert {path.name: path.read_bytes() for path in output.iterdir()} == before
-    assert archive.read_bytes() == previous_archive
-    assert not (local_project / "input" / "previous_output").exists()
-
-    state["failure"] = None
-    main.main(main.DEFAULT_PAGE_URL)
-    # Первый лист уже проверен, поэтому при ручном перезапуске остаются два.
-    assert calls == [("ocr", 1), ("ocr", 2), ("ocr", 2), ("ocr", 3)]
-    assert page_cache.read_bytes() == verified_page
-
-
-def test_real_sources_and_both_caches_rebuild_with_network_blocked(local_project, monkeypatch):
-    calls = []
-
-    def classify_once(*args, **kwargs):
-        calls.append(args)
-        return fake_classification(*args, **kwargs)
-
-    original_sources = {name: (local_project / "input" / name).read_bytes() for name in SOURCE_NAMES}
-    monkeypatch.setattr(classification, "request_gemini", classify_once)
-    main.main(main.DEFAULT_PAGE_URL)
-    assert len(calls) == 1
-
-    def gemini_forbidden(*args, **kwargs):
-        pytest.fail("Gemini при подходящем кэше запрещён")
-
-    monkeypatch.setattr(classification, "request_gemini", gemini_forbidden)
-    main.main(main.DEFAULT_PAGE_URL)
-    for name, contents in original_sources.items():
-        assert (local_project / "input" / name).read_bytes() == contents
-
-    output = local_project / "output" / "trvar542"
-    expected = {"tasks.xlsx", *IMAGE_NAMES.values()}
-    assert {path.name for path in output.iterdir()} == expected
-    assert not list(output.glob("*ocr*"))
-    with ZipFile(local_project / "trvar542_result.zip") as archive:
-        assert set(archive.namelist()) == expected
-        assert len(archive.namelist()) == 5
-        assert archive.testzip() is None
-        for name in expected:
-            assert archive.read(name) == (output / name).read_bytes()
-
-    workbook = load_workbook(output / "tasks.xlsx")
-    try:
-        sheet = workbook["Tasks"]
-        assert list(next(sheet.values)) == ["task_num", "condition", "image_name", "solution", "answer", "exams_id", "topics_id"]
-        assert sheet.max_row == 20
-        assert [sheet.cell(row, 1).value for row in range(2, 21)] == list(range(1, 20))
-        assert {row[0].value: row[2].value for row in sheet.iter_rows(min_row=2) if row[2].value} == IMAGE_NAMES
-        assert sheet["E6"].value == "0,9940"
-        assert sheet["E6"].data_type == "s"
-        assert sheet["G9"].value == NEW_TOPIC
-        assert sheet["G9"].data_type == "s"
-        assert sheet["G3"].value == 526
-        assert sheet["G3"].data_type == "n"
-        assert all(row[3].value is None for row in sheet.iter_rows(min_row=2))
-        assert all(type(row[5].value) is int for row in sheet.iter_rows(min_row=2))
-        # Проверяем конечный Excel по полному исходному справочнику,
-        # независимо от функции отбора кандидатов классификатора.
-        with (local_project / "data" / "exams.csv").open(encoding="utf-8-sig") as source:
-            exams = {int(record["id"]): int(record["parent_of_exam"]) for record in csv.DictReader(source)}
-        parents = set(exams.values())
-        for row in sheet.iter_rows(min_row=2):
-            exam_id = row[5].value
-            assert exam_id == 180
-            assert exam_id not in parents
-            current = exams[exam_id]
-            while current and current != 2:
-                current = exams[current]
-            assert current == 2
-        assert "<br>Б)" in sheet["E14"].value
-        assert "\\frac" in sheet["E14"].value
-        assert "<br>Б)" in sheet["B14"].value
-        assert "<br>Б)" in sheet["E20"].value
-        about = workbook["about"]
-        assert list(next(about.values)) == list(ABOUT_FIELDS)
-        assert about.max_column == 11 and about.max_row == 2
-        fields = dict(zip((cell.value for cell in about[1]), (cell.value for cell in about[2])))
-        assert fields["source_url"] == main.DEFAULT_PAGE_URL
-        assert fields["exam_id"] is None
-    finally:
-        workbook.close()
-
-
-def test_changed_prompt_reclassifies_topics_through_main_and_reuses_both_caches(
-    local_project, monkeypatch,
-):
-    """Проверяем обновление выгрузки через main; смысловой выбор API подменён."""
-    original_sources = {
-        name: (local_project / "input" / name).read_bytes() for name in SOURCE_NAMES
-    }
-    topics = classification.load_catalog(
-        local_project / "data" / "topics.csv",
-        name_column="name", parent_column="parent", root_id=1,
-    )
-    labels = {
-        number: label
-        for label, number in classification.build_category_choices(topics, "T").items()
-    }
-    previous_prompt = "Предыдущая инструкция классификации без смысловых уточнений."
-    current_prompt = classification.PROMPT
-    calls = []
-    assignments = {3: 616, 11: 541, 19: 643}
-
-    def fake_response(prompt, *, model, schema, request_counter=None):
-        calls.append(prompt)
-        items = json.loads(fake_classification(prompt, model=model, schema=schema))
-        for item in items:
-            if item["task_num"] not in assignments:
-                continue
-            topic = assignments[item["task_num"]]
-            item["topic_kind"] = "existing" if type(topic) is int else "new"
-            item["topic_choice"] = labels[topic] if type(topic) is int else topic
-        return json.dumps(items, ensure_ascii=False)
-
-    monkeypatch.setattr(classification, "request_gemini", fake_response)
-    monkeypatch.setattr(classification, "PROMPT", previous_prompt)
-    main.main(main.DEFAULT_PAGE_URL)
-    cache_path = local_project / "input" / "trvar542_classification.json"
-    previous_cache = json.loads(cache_path.read_text(encoding="utf-8"))
-    assert {row["task_num"]: row["topics_id"] for row in previous_cache["tasks"]
-            if row["task_num"] in assignments} == assignments
-
-    # Меняется только инструкция: правила структуры, данные и настройки те же.
-    monkeypatch.setattr(classification, "PROMPT", current_prompt)
-    assignments = {3: 585, 11: "Кусочно заданная функция", 19: 637}
-    main.main(main.DEFAULT_PAGE_URL)
-    current_cache = json.loads(cache_path.read_text(encoding="utf-8"))
-    assert len(calls) == 2
-    assert calls[0].startswith(previous_prompt)
-    assert calls[1].startswith(current_prompt)
-    assert current_cache["rules_version"] == previous_cache["rules_version"]
-    assert current_cache["fingerprint"] != previous_cache["fingerprint"]
-    assert current_cache["choices"][10]["topic_kind"] == "new"
-    assert {row["task_num"]: row["topics_id"] for row in current_cache["tasks"]
-            if row["task_num"] in assignments} == assignments
-
-    def gemini_forbidden(*args, **kwargs):
-        pytest.fail("Повторная сборка с актуальным промптом должна читать кэш")
-
-    monkeypatch.setattr(classification, "request_gemini", gemini_forbidden)
-    main.main(main.DEFAULT_PAGE_URL)
-    assert json.loads(cache_path.read_text(encoding="utf-8")) == current_cache
-    assert all((local_project / "input" / name).read_bytes() == contents
-               for name, contents in original_sources.items())
-
-    workbook = load_workbook(local_project / "output" / "trvar542" / "tasks.xlsx")
-    try:
-        sheet = workbook["Tasks"]
-        assert sheet.max_column == 7 and sheet.max_row == 20
-        assert sheet["G4"].value == 585 and sheet["G4"].data_type == "n"
-        assert sheet["G12"].value == "Кусочно заданная функция"
-        assert sheet["G12"].data_type == "s"
-        assert sheet["G20"].value == 637 and sheet["G20"].data_type == "n"
-    finally:
-        workbook.close()
-
-
-@pytest.mark.parametrize("failure", ["api", "invalid_response"])
-def test_failed_classification_keeps_previous_successful_files(local_project, monkeypatch, failure):
-    monkeypatch.setattr(classification, "request_gemini", fake_classification)
-    main.main(main.DEFAULT_PAGE_URL)
-    output = local_project / "output" / "trvar542"
-    before = {path.name: path.read_bytes() for path in output.iterdir()}
-    archive = local_project / "trvar542_result.zip"
-    original_archive = archive.read_bytes()
-    (local_project / "input" / "trvar542_classification.json").unlink()
-
-    calls = []
-
-    def fail_classification(*args, **kwargs):
-        calls.append(args)
-        if failure == "api":
-            raise RuntimeError("Gemini: сеть или API недоступны")
-        return "Некорректный JSON"
-
-    monkeypatch.setattr(classification, "request_gemini", fail_classification)
-    error_type, message = (RuntimeError, "Gemini") if failure == "api" else (ValueError, "одного запроса|один запрос")
-    with pytest.raises(error_type, match=message):
-        main.main(main.DEFAULT_PAGE_URL)
-    assert len(calls) == 1
-    assert {path.name: path.read_bytes() for path in output.iterdir()} == before
-    assert archive.read_bytes() == original_archive
-    assert not (local_project / "input" / "previous_output").exists()
+def test_cli_batch_size_guard_and_error_exit(tmp_path, monkeypatch, capsys):
+    import pipeline
+    contexts = [object()] * 6
+    monkeypatch.setattr(pipeline, "selected_contexts", lambda *a, **kw: contexts)
+    monkeypatch.setattr(pipeline, "run_batch", lambda *a, **kw: pytest.fail("Большой платный пакет запрещён"))
+    assert main.cli(["--batch", "1-6"]) == 1
+    assert "max-variants" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("encoding", ["utf-8", "windows-1251"])

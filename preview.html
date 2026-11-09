@@ -75,7 +75,10 @@
 <body>
 
   <h2>Проверка парсинга MathJax из Excel</h2>
-  <p>Скопируйте Tasks!A1:G20 из Excel (Ctrl+C) и вставьте ниже (Ctrl+V). Для загрузки MathJax нужен доступ в интернет.</p>
+  <p>Скопируйте все строки листа Tasks, семь колонок от A до G, и вставьте ниже. Для загрузки MathJax нужен доступ в интернет.</p>
+  <label for="aboutInput">Вариант: вставьте обе строки листа about</label>
+  <textarea id="aboutInput" style="height: 72px" placeholder="Заголовки и значения листа about..."></textarea>
+  <p id="variantInfo" aria-live="polite"></p>
   
   <textarea id="excelInput" placeholder="Вставьте скопированные из Excel строки сюда..."></textarea>
   <br>
@@ -86,6 +89,7 @@
   <script>
     // Обработка клика и авто-вставки
     document.getElementById('excelInput').addEventListener('input', renderExcelData);
+    document.getElementById('aboutInput').addEventListener('input', renderAbout);
     document.getElementById('MathJax-script').addEventListener('load', renderExcelData);
 
     function escapeHtml(value) {
@@ -99,6 +103,30 @@
     function renderTaskText(value) {
       // Формулы и знаки сравнения остаются текстом. Разрешён только перенос <br>.
       return escapeHtml(value).replace(/&lt;br\s*\/?&gt;/gi, '<br>');
+    }
+
+    function renderAbout() {
+      const info = document.getElementById('variantInfo');
+      const rows = parseTSV(document.getElementById('aboutInput').value);
+      info.textContent = '';
+      if (rows.length < 2) return;
+      const about = {};
+      rows[0].forEach((field, index) => { about[field.trim()] = rows[1][index] || ''; });
+      const title = [about.title || about.code, about.year].filter(Boolean).join(' · ');
+      info.appendChild(document.createTextNode(title));
+      try {
+        const source = new URL(about.source_url);
+        if (!['https:', 'http:'].includes(source.protocol)) return;
+        const link = document.createElement('a');
+        link.href = source.href;
+        link.textContent = source.href;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        info.appendChild(document.createElement('br'));
+        info.appendChild(link);
+      } catch (_) {
+        // Неполные метаданные не мешают проверить сами условия.
+      }
     }
 
     function renderExcelData() {
