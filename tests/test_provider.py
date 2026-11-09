@@ -91,6 +91,23 @@ def test_default_requests_session_has_no_adapter_retries():
         client.close()
 
 
+def test_failed_preparation_is_not_a_paid_attempt(tmp_path, monkeypatch):
+    import provider
+    client, session, counter = client_for(FakeResponse())
+    def fail_write(*args, **kwargs):
+        raise OSError("нет места для диагностики")
+    monkeypatch.setattr(provider, "atomic_json", fail_write)
+    with pytest.raises(OSError):
+        client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)
+    assert not session.calls and not client.attempts and counter.total == 0
+
+
+def test_partial_usage_remains_explicitly_unknown():
+    result = usage_summary([{"usage": {"prompt_tokens": 12}}])
+    assert result["prompt_tokens"] == 12
+    assert result["unknown_usage_attempts"] == 1 and result["cost"] is None
+
+
 @pytest.mark.parametrize("outcome", [
     FakeResponse(status=500, data={"error": {"message": "server failure"}}),
     FakeResponse(status=302, data={"error": {"message": "redirect"}}),

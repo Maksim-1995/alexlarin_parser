@@ -69,10 +69,12 @@ class VariantContext:
         year = int(path.parent.name)
         if not 2000 <= year <= 2100:
             raise ValueError(f"Некорректный год варианта: {year}")
-        safe_code = path.stem.replace("*", "_star").replace("+", "_plus")
+        # ~ не допускается в исходном code: экранирование не сталкивается
+        # с реально существующими суффиксами вроде _star или _plus.
+        safe_code = path.stem.replace("*", "~2a").replace("+", "~2b")
         key = f"ege_{year}_{safe_code}"
         if urlsplit(url).query:
-            key += "_q" + sha256(urlsplit(url).query.encode()).hexdigest()[:12]
+            key += "~q" + sha256(urlsplit(url).query.encode()).hexdigest()[:12]
         return cls(key, int(match["number"]), path.stem, year, url, Path(base_dir))
 
     @property
@@ -295,6 +297,7 @@ def task_positions(page):
     """Основные метки PDF; подпункты А), Б), В) без числа не подходят."""
     positions = []
     words = page.get_text("words")
+    visible_words = [pymupdf.Rect(*word[:4]) * page.rotation_matrix for word in words]
     for index, word in enumerate(words):
         x0, y0, x1, y1, value, block, line, word_num = word
         if word_num != 0:
@@ -305,11 +308,21 @@ def task_positions(page):
         fused = re.match(r"^([BВCС]\d+)(?=[А-ЯЁ])", value, re.I)
         if fused:
             candidate = fused[1]
-        if value.upper() in {"B", "В", "C", "С"} and index + 1 < len(words):
-            other = words[index + 1]
-            if other[5:7] == word[5:7] and re.fullmatch(r"\d+[.)]?", other[4]):
+        if value.upper() in {"B", "В", "C", "С"}:
+            # Буква B и цифра 8 могут лежать в разных PDF text blocks.
+            # Сопоставляем только непосредственно соседние видимые глифы
+            # на одной базовой линии, а не произвольную цифру из text stream.
+            anchor = visible_words[index]
+            neighbors = [j for j, other in enumerate(words)
+                         if re.fullmatch(r"\d+[.)]?", other[4])
+                         and -1 <= visible_words[j].x0 - anchor.x1 <= 4
+                         and abs((visible_words[j].y0 + visible_words[j].y1)
+                                 - (anchor.y0 + anchor.y1)) <= 4]
+            if len(neighbors) == 1:
+                other = words[neighbors[0]]
                 candidate += other[4]
-                x1, y1 = other[2:4]
+                joined = pymupdf.Rect(x0, y0, x1, y1) | pymupdf.Rect(*other[:4])
+                x0, y0, x1, y1 = joined
         # Современная цифровая метка должна иметь точку; иначе цифра формулы
         # или номер страницы ошибочно становится основной задачей.
         if not candidate[:1].upper() in {"B", "В", "C", "С"} and not candidate.endswith("."):
@@ -318,9 +331,23 @@ def task_positions(page):
             label = normalize_label(candidate)
         except ValueError:
             continue
+        # get_text/get_image_rects возвращают координаты до /Rotate, а
+        # page.rect и OCR-рендер уже учитывают поворот старых PDF на 90°.
+        rect = pymupdf.Rect(x0, y0, x1, y1) * page.rotation_matrix
         positions.append({"source_label": label, "original_label": candidate,
-                          "x": x0, "y": y0, "x1": x1, "y1": y1})
-    return positions
+                          "x": rect.x0, "y": rect.y0, "x1": rect.x1, "y1": rect.y1})
+    if any(p["source_label"][0] in {"B", "C"} for p in positions):
+        # В формате B/C цифра «1.» или «729.» внутри формулы не является
+        # ещё одной основной задачей цифрового формата.
+        positions = [p for p in positions if p["source_label"][0] in {"B", "C"}]
+    # Порядок объектов content stream старых PDF не равен порядку чтения:
+    # например C5 может быть записана перед B12. Канонические метки задают
+    # стабильный порядок основных задач независимо от внутренней записи PDF.
+    def label_order(position):
+        label = position["source_label"]
+        match = re.fullmatch(r"([BC]?)(\d+)", label)
+        return ({"": 0, "B": 1, "C": 2}[match[1]], int(match[2]))
+    return sorted(positions, key=label_order)
 
 
 def inspect_pdf(data, context):
@@ -341,7 +368,16 @@ def inspect_pdf(data, context):
                 raise ValueError("PDF относится к другому году")
             page_positions = [task_positions(page) for page in document]
             page_dimensions = [{"width": page.rect.width, "height": page.rect.height} for page in document]
-            page_labels = [[position["source_label"] for position in positions] for positions in page_positions]
+            printed_labels = [[position["source_label"] for position in positions] for positions in page_positions]
+            seen_labels = set()
+            page_labels = []
+            for printed in printed_labels:
+                starts = []
+                for label in printed:
+                    if label not in seen_labels:
+                        starts.append(label)
+                        seen_labels.add(label)
+                page_labels.append(starts)
     except (RuntimeError, pymupdf.FileDataError) as error:
         raise ValueError("Не удалось прочитать PDF") from error
     labels = []

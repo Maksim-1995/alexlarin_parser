@@ -3,6 +3,7 @@
 import json
 import re
 import shutil
+from html import escape
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -21,6 +22,48 @@ TASK_FIELDS = (
     "task_num", "condition", "image_name", "solution", "answer", "exams_id", "topics_id",
 )
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".jpx", ".jp2", ".bmp", ".tiff", ".gif", ".webp"}
+
+
+def format_condition_tables(text):
+    """Передать распознанную таблицу в HTML без изменения её ячеек.
+
+    Разделителями являются только | вне MathJax; модуль внутри $...$ не
+    становится новой колонкой. Неоднозначная разметка остаётся исходным текстом.
+    """
+    def cells(line):
+        result = [""]
+        for index, part in enumerate(MATH_RE.split(line.strip().strip("|"))):
+            if index % 2:
+                result[-1] += part
+            else:
+                bits = part.split("|")
+                result[-1] += bits[0]
+                result.extend(bits[1:])
+        return [cell.strip() for cell in result]
+
+    lines, result, index = text.splitlines(), [], 0
+    separator = re.compile(r"\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)+\|?\s*")
+    while index < len(lines):
+        if index + 1 < len(lines) and "|" in lines[index] and separator.fullmatch(lines[index + 1]):
+            rows = [cells(lines[index])]
+            end = index + 2
+            while end < len(lines) and lines[end].strip().startswith("|"):
+                row = cells(lines[end])
+                if len(row) != len(rows[0]):
+                    break
+                rows.append(row)
+                end += 1
+            if len(rows) > 1:
+                table = "<table>" + "".join(
+                    "<tr>" + "".join(f"<{tag}>{escape(value)}</{tag}>" for value in row) + "</tr>"
+                    for row, tag in [(rows[0], "th"), *((r, "td") for r in rows[1:])]
+                ) + "</table>"
+                result.append(table)
+                index = end
+                continue
+        result.append(lines[index])
+        index += 1
+    return "\n".join(result)
 
 
 def normalize_answer(answer):
@@ -180,7 +223,8 @@ def extract_variant_images(pdf_path, tasks, images_dir, *, positions=None):
             embedded_rects = []
             for item in page.get_images(full=True):
                 xref = item[0]
-                for rect in page.get_image_rects(xref):
+                for source_rect in page.get_image_rects(xref):
+                    rect = source_rect * page.rotation_matrix
                     if rect.width < 12 or rect.height < 12:
                         continue
                     if rect.get_area() > page.rect.get_area() * 0.75:
@@ -203,7 +247,8 @@ def extract_variant_images(pdf_path, tasks, images_dir, *, positions=None):
                     manifest.append({"source_label": label, "page_number": page_number,
                                      "image_name": name, "rect": list(rect), "kind": "embedded"})
 
-            for index, rect in enumerate(_vector_rects(page), 1):
+            for index, source_rect in enumerate(_vector_rects(page), 1):
+                rect = source_rect * page.rotation_matrix
                 if any((existing + (-3, -3, 3, 3)).contains(rect) for existing in embedded_rects):
                     continue
                 label = _owner(rect, anchors, tasks, page_number, page.rect.width)
@@ -343,7 +388,14 @@ def export_variant(context, tasks, metadata, *, pdf_path, positions=None):
                 task["condition"], re.IGNORECASE,
             ):
                 warnings.append(f"{task['source_label']}: условие ссылается на рисунок, извлечение требует проверки по PDF")
+            condition, annotations = re.subn(
+                r"\[ИЗОБРАЖЕНИЕ\s*:[^\]]*\]", "", task["condition"], flags=re.IGNORECASE,
+            )
+            if annotations:
+                warnings.append(f"{task['source_label']}: удалено добавленное OCR описание рисунка; сверьте условие с PDF")
+                task["condition"] = condition.strip()
             try:
+                task["condition"] = format_condition_tables(task["condition"])
                 task["condition"] = add_subtask_breaks(normalize_condition(task["condition"]))
             except ValueError as error:
                 warnings.append(f"{task['source_label']}: условие требует проверки оформления: {error}")

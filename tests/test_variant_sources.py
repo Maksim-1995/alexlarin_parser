@@ -53,6 +53,9 @@ def test_context_keys_paths_and_additional_versions_are_isolated(tmp_path):
     assert one.output_dir != another_year.output_dir
     assert one.archive_path.name == "ege_2013_trvar1_result.zip"
     assert extra.code == "trvar4_2"
+    urls = ["trvar4*.html", "trvar4_star.html", "trvar4+.html", "trvar4_plus.html"]
+    assert len({VariantContext.from_url("https://alexlarin.net/ege/2013/" + code, tmp_path).variant_key
+                for code in urls}) == 4
 
 
 def test_catalog_uses_actual_hrefs_and_selects_main_four(tmp_path):
@@ -108,7 +111,35 @@ def test_continuation_label_is_one_main_identity_across_pages(tmp_path):
             page.insert_text((30, 50), label + " continued")
         result = inspect_pdf(document.tobytes(), context)
     assert result["source_labels"] == ["B1", "C1"]
-    assert result["page_labels"] == [["B1"], ["B1"], ["C1"]]
+    assert result["page_labels"] == [["B1"], [], ["C1"]]
+
+
+def test_split_label_across_pdf_blocks_uses_visual_adjacency_and_ignores_formula_numbers():
+    from types import SimpleNamespace
+    words = [
+        (30, 50, 37, 60, "B", 2, 0, 0),
+        (200, 80, 220, 90, "729.", 3, 0, 0),
+        (37, 50, 42, 60, "8", 4, 0, 0),
+        (30, 20, 43, 30, "B3", 5, 0, 0),
+    ]
+    page = SimpleNamespace(get_text=lambda kind: words, rotation_matrix=pymupdf.Matrix(1, 1))
+    positions = task_positions(page)
+    assert [p["source_label"] for p in positions] == ["B3", "B8"]
+    assert positions[1]["original_label"] == "B8"
+
+
+def test_rotated_pdf_positions_match_rendered_page_coordinates():
+    with pymupdf.open() as document:
+        page = document.new_page(width=595, height=842)
+        page.insert_text((40, 700), "B1. Condition")
+        original = pymupdf.Rect(*page.get_text("words")[0][:4])
+        page.set_rotation(90)
+        position = task_positions(page)[0]
+        expected = original * page.rotation_matrix
+        assert position["x"] == pytest.approx(expected.x0)
+        assert position["y"] == pytest.approx(expected.y0)
+        assert 0 <= position["x"] < page.rect.width
+        assert 0 <= position["y"] < page.rect.height
 
 
 def test_sources_download_once_then_reuse_bound_manifest(tmp_path, monkeypatch):

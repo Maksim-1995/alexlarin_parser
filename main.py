@@ -8,25 +8,16 @@ import argparse
 import json
 import re
 import sys
-from contextlib import nullcontext
-from datetime import date, datetime
+from datetime import date
 from html import unescape
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from urllib.parse import unquote, urljoin, urlsplit
 
 import jsbeautifier
 import pymupdf
 from jsbeautifier.unpackers import UnpackingError, packer
 
-from ai_requests import AIRequestCounter
-from downloader import load_source
-from exporter import create_zip, write_excel
-from export_metadata import prepare_about_metadata
-from latex_format import normalize_condition
 from parsers import parse_js_answers, parse_tasks
-from recognizer import get_task_positions
-from task_html import add_subtask_breaks
 
 
 DEFAULT_PAGE_URL = "https://alexlarin.net/ege/2026/trvar542.html"
@@ -184,153 +175,6 @@ def parse_metadata(text, source_url, export_date):
         "source_url": source_url,
         "date_kind": "Дата формирования выгрузки",
     }
-
-
-def find_image_task(positions, center_x, center_y, middle_x):
-    """Найти ближайшее задание выше рисунка в той же колонке."""
-    candidates = []
-    image_is_right = center_x >= middle_x
-
-    for position in positions:
-        task_is_right = position["x"] >= middle_x
-        same_column = task_is_right == image_is_right
-        starts_above = position["y"] <= center_y
-
-        if same_column and starts_above:
-            candidates.append(position)
-
-    if not candidates:
-        return None
-
-    nearest_task = max(candidates, key=lambda position: position["y"])
-    return nearest_task["task_num"]
-
-
-def prepare_output_dir(output_dir):
-    """Сохранить прежнюю выгрузку в input и создать пустой каталог."""
-    if output_dir.exists():
-        backup_root = INPUT_DIR / "previous_output"
-        backup_root.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        backup_dir = backup_root / f"{output_dir.name}_{timestamp}"
-        output_dir.rename(backup_dir)
-        print(f"Предыдущая выгрузка сохранена: {backup_dir}")
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    return output_dir
-
-
-def extract_task_images(pdf_path, tasks, images_dir):
-    """Сохранить только встроенные изображения, связанные с заданиями.
-
-    Привязка рассчитана на текущую вёрстку PDF с двумя колонками.
-    QR-код и пример заполнения ответа находятся вне областей заданий
-    и поэтому не сохраняются. Снимки целых заданий не создаются.
-    """
-    task_images = {task["task_num"]: [] for task in tasks}
-    image_files = {}
-
-    with pymupdf.open(pdf_path) as document:
-        for page in document:
-            positions = get_task_positions(page)
-            middle_x = page.rect.width / 2
-
-            for image in page.get_images():
-                xref = image[0]
-                related_tasks = set()
-
-                for rect in page.get_image_rects(xref):
-                    center_x = (rect.x0 + rect.x1) / 2
-                    center_y = (rect.y0 + rect.y1) / 2
-                    task_num = find_image_task(
-                        positions, center_x, center_y, middle_x
-                    )
-
-                    if task_num in task_images:
-                        related_tasks.add(task_num)
-
-                # У служебных картинок нет подходящего задания.
-                if not related_tasks:
-                    continue
-
-                if xref not in image_files:
-                    image_data = document.extract_image(xref)
-                    image_name = f"image_{xref}.{image_data['ext']}"
-                    (images_dir / image_name).write_bytes(image_data["image"])
-                    image_files[xref] = image_name
-
-                image_name = image_files[xref]
-                for task_num in sorted(related_tasks):
-                    if image_name not in task_images[task_num]:
-                        task_images[task_num].append(image_name)
-
-    for task in tasks:
-        names = task_images[task["task_num"]]
-        task["image_name"] = "\n".join(names)
-        if names:
-            print(f"Задание {task['task_num']}: {task['image_name']}")
-
-    print(f"Сохранено рисунков заданий: {len(image_files)}")
-
-
-def validate_tasks(tasks, images_dir):
-    """Проверить структуру данных и наличие указанных файлов.
-
-    Пустое image_name допустимо: не у каждого задания есть рисунок.
-    Эта проверка не оценивает правильность извлечения формул.
-    """
-    numbers = [task["task_num"] for task in tasks]
-    if numbers != list(range(1, 20)):
-        raise ValueError("Ожидались задания с номерами от 1 до 19")
-
-    used_images = set()
-
-    for task in tasks:
-        number = task["task_num"]
-        condition = task.get("condition")
-        if not isinstance(condition, str) or not condition.strip():
-            raise ValueError(f"У задания {number} пустое условие")
-
-        answer = task.get("answer")
-        if not isinstance(answer, str) or not answer.strip():
-            raise ValueError(f"У задания {number} отсутствует текстовый ответ")
-
-        for image_name in task["image_name"].splitlines():
-            if not (images_dir / image_name).is_file():
-                raise FileNotFoundError(
-                    f"Задание {number}: не найден файл {image_name}"
-                )
-            used_images.add(image_name)
-
-    saved_images = {
-        path.name
-        for path in images_dir.iterdir()
-        if path.is_file() and path.name != "tasks.xlsx"
-    }
-    if saved_images != used_images:
-        raise ValueError(
-            "Состав папки результата не совпадает "
-            "с именами рисунков в заданиях"
-        )
-
-    print("Структура проверена: 19 заданий, ответы и ссылки на рисунки.")
-
-
-def load_local_source(url, path, validate):
-    """Проверить локальный исходник для --fresh-ai без обращения к сайту."""
-    path = Path(path)
-    try:
-        data = path.read_bytes()
-        if not data:
-            raise ValueError("пустой файл")
-        result = validate(data)
-    except (OSError, ValueError) as error:
-        raise ValueError(
-            f"--fresh-ai: нет подходящего локального исходника {path} "
-            f"для {url}: {error}"
-        ) from error
-    print(f"Используем сохранённый исходник: {path}", flush=True)
-    return result
 
 
 def main(page_url=DEFAULT_PAGE_URL, *, fresh_ai=False, local_only=False):

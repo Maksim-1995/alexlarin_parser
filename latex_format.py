@@ -18,6 +18,7 @@ MATH_RE = re.compile(
 
 TOKEN_RE = re.compile(
     r"(?<![\w\\])(?:[A-Z](?:_(?:\d+|\{\d+\}))?)+(?!\w)"
+    r"|(?<![\w\\])[a-z](?:_(?:\d+|\{\d+\}))?(?!\w)"
     r"|(?<![\w\\])\d+(?:[.,]\d+)?(?!\w)"
 )
 
@@ -26,7 +27,7 @@ def _wrap_token(match):
     """Оформить обозначение или число, сохранив метки подпунктов A), B), C)."""
     token = match.group()
     following = match.string[match.end():]
-    if token in {"A", "B", "C"} and following.startswith(")"):
+    if token in set("ABCDabcd") and following.startswith(")"):
         return token
     return f"${token}$"
 
@@ -42,7 +43,9 @@ def normalize_condition(condition):
 
     for index in range(0, len(parts), 2):
         text = parts[index]
-        text = re.sub(r"\\n(?=\s*[АБВABC]\))", "\n", text)
+        # Только самостоятельный escape вне math; команды \neq/\nu и
+        # переводы строк LaTeX внутри cases остаются без изменений.
+        text = re.sub(r"\\n(?=\s*[АБВABC]\))|\\n(?![A-Za-z])", "\n", text)
         if re.search(r"(?<!\\)\$", text):
             raise ValueError("Непарный знак $: проверьте границы формулы")
         if re.search(r"\\[A-Za-z]+|\\[()\[\]]", text):

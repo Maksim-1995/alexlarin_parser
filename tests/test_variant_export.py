@@ -206,3 +206,12 @@ def test_vector_detection_excludes_table_grid_and_tall_radical_but_keeps_geometr
         rects = variant_export._vector_rects(page)
         assert len(rects) == 1
         assert rects[0].contains(pymupdf.Point(170, 300))
+
+
+def test_table_preserves_cells_and_does_not_split_modulus_in_math():
+    table = "Тарифы\n| Вид | Условие |\n|---|---|\n| A | $|x|<2$ |\n| Б | 0,96 |"
+    rendered = variant_export.format_condition_tables(table)
+    assert rendered.startswith("Тарифы\n<table><tr><th>Вид</th><th>Условие</th>")
+    assert "<td>$|x|&lt;2$</td>" in rendered
+    assert "<td>0,96</td>" in rendered
+    assert rendered.count("<tr>") == 3

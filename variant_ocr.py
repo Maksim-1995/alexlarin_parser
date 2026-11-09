@@ -56,7 +56,7 @@ def render_scheme(page, dpi):
         clips = [[0, 0, width / 2 + 3, height], [width / 2 - 3, 0, width, height]]
     else:
         clips = [[0, 0, width, height]]
-    return {"version": 1, "dpi": dpi, "colorspace": "RGB", "alpha": False,
+    return {"version": 2, "dpi": dpi, "colorspace": "RGB", "alpha": False,
             "layout": "two_columns" if split else "full_page", "clips": clips}
 
 
@@ -98,16 +98,20 @@ def validate_page(data, page_num, expected_labels, all_labels, previous_label=No
     if expected_labels is not None and starts != expected_labels:
         raise ValueError(f"OCR: начала задач страницы {page_num}: {starts}, ожидались {expected_labels}")
     answers = {}
+    issues = list(data["issues"])
     if data["answers"] and not has_answer_images:
         raise ValueError("OCR: ответы без изображения опубликованных ответов запрещены")
     for original, answer in data["answers"].items():
         label = normalize_label(original)
         if all_labels and label not in all_labels:
             raise ValueError(f"OCR: ответ неизвестной задачи {label}")
-        if label in answers or not isinstance(answer, str) or not answer.strip():
-            raise ValueError(f"OCR: повторный или пустой ответ {label}")
+        if label in answers or not isinstance(answer, str):
+            raise ValueError(f"OCR: повторный или некорректный ответ {label}")
+        if not answer.strip():
+            issues.append(f"Опубликованный ответ {label} пустой/не прочитан; требуется проверка")
+            continue
         answers[label] = answer.strip()
-    return {"page_num": page_num, "tasks": fragments, "answers": answers, "issues": data["issues"]}
+    return {"page_num": page_num, "tasks": fragments, "answers": answers, "issues": issues}
 
 
 def _public_page(result):
@@ -209,6 +213,16 @@ def recognize_variant(context, sources, client, *, cache_dir=None, allow_legacy=
                 "previous_label": previous_label, "all_labels": all_labels,
                 "answer_images": [{"name": p.name, "sha256": file_sha256(p)} for p in attached],
             }
+            # В длинном варианте последняя страница может содержать только
+            # C6, а картинка ответов — C1–C6. Область answers не ограничена
+            # expected_labels текущей страницы. Это часть identity запроса.
+            answer_scope = [label for label in all_labels
+                            if label not in sources.get("html_answers", {})
+                            and label not in sources.get("extra_answers", {})]
+            separate_answer_scope = bool(attached and expected is not None
+                                         and set(answer_scope) - set(expected))
+            if separate_answer_scope:
+                identity["answer_scope"] = {"version": 1, "source_labels": answer_scope}
             identities.append(identity)
             path = cache_root / "ocr" / f"page_{page_num:03d}.json"
             cached = read_json(path)
@@ -225,6 +239,12 @@ def recognize_variant(context, sources, client, *, cache_dir=None, allow_legacy=
                     "page_num": page_num, "expected_start_labels": expected,
                     "previous_label": previous_label, "layout": scheme["layout"],
                 })}]
+                if separate_answer_scope:
+                    content.append({"type": "text", "text":
+                        "ВАЖНО: answers содержит ВСЕ опубликованные ответы картинки для всего варианта, "
+                        "даже когда условия этих задач находятся на других страницах. "
+                        "expected_start_labels ограничивает только tasks, но НЕ answers. "
+                        "Перепиши опубликованные ответы для меток: " + ", ".join(answer_scope)})
                 for column, clip in enumerate(scheme["clips"], 1):
                     content.append({"type": "text", "text": f"УСЛОВИЯ: страница {page_num}, фрагмент {column}"})
                     content.append(_image_part(page.get_pixmap(

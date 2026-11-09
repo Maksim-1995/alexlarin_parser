@@ -126,8 +126,8 @@ class DeepSeekClient:
             "provider": identity["provider"], "model": self.settings.model,
             "status": "STARTED", "usage": None, "cost": None,
         }
-        self.attempts.append(attempt)
         atomic_json(debug_dir / f"attempt_{attempt['attempt']:03d}_{stage}.json", attempt)
+        self.attempts.append(attempt)
         setattr(self.counter, stage, getattr(self.counter, stage) + 1)
         started = time.monotonic()
         try:
@@ -209,6 +209,8 @@ def usage_summary(attempts):
         "prompt_tokens": sum(u.get("prompt_tokens", 0) for u in known),
         "completion_tokens": sum(u.get("completion_tokens", 0) for u in known),
         "total_tokens": sum(u.get("total_tokens", 0) for u in known),
-        "unknown_usage_attempts": len(attempts) - len(known),
+        "unknown_usage_attempts": len(attempts) - sum(
+            {"prompt_tokens", "completion_tokens", "total_tokens"}.issubset(u) for u in known
+        ),
         "cost": None,
     }

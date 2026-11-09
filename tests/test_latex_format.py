@@ -5,6 +5,15 @@ import unittest
 from latex_format import normalize_condition
 
 
+def test_literal_newlines_before_math_do_not_change_cases_rows():
+    formula = r"$$\begin{cases}x\neq 0\\y=2\end{cases}$$"
+    assert normalize_condition(r"Система:\n" + formula) == "Система:\n" + formula
+
+
+def test_single_lowercase_symbols_are_math_and_subpart_label_is_preserved():
+    assert normalize_condition("a) Где h — высота, t — время.") == "a) Где $h$ — высота, $t$ — время."
+
+
 class LatexFormatTests(unittest.TestCase):
     def test_geometry_and_missing_space(self):
         source = (

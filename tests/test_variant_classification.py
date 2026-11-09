@@ -90,8 +90,9 @@ def test_one_variant_one_request_then_cache_and_input_not_mutated(context, tasks
     payload = json.loads(call["messages"][1]["content"])
     assert payload["variant_key"] == context.variant_key
     assert payload["tasks"] == tasks
-    assert {row["id"] for row in payload["exams"]} == {11, 12}
-    assert {row["id"] for row in payload["topics"]} == {11, 12}
+    assert {row["choice"] for row in payload["exams"]} == {"E001", "E002"}
+    assert {row["choice"] for row in payload["topics"]} == {"T001", "T002"}
+    assert all("id" not in row for row in [*payload["exams"], *payload["topics"]])
     assert payload["exams"][0]["path"] == "Уравнения > Тригонометрические уравнения"
     assert tasks == original
 
@@ -101,6 +102,32 @@ def test_one_variant_one_request_then_cache_and_input_not_mutated(context, tasks
     cached = json.loads((context.cache_dir / "classification.json").read_text(encoding="utf-8"))
     assert cached["identity"]["provider_settings"]["provider"] == "deepseek"
     assert cached["identity"]["variant_key"] == context.variant_key
+
+
+def test_model_choices_are_decoded_in_separate_namespaces(context, tasks, catalogues):
+    client = FakeClient()
+    client.response = {"tasks": [
+        {"task_num": 1, "exams_id": "E002", "topics_id": "T002"},
+        {"task_num": 2, "exams_id": "E001", "topics_id": "T001"},
+    ]}
+    assert run(context, tasks, catalogues, client) == {
+        1: {"exams_id": 12, "topics_id": 12}, 2: {"exams_id": 11, "topics_id": 11},
+    }
+    client.response["tasks"][0]["topics_id"] = "E002"
+    tasks[0]["condition"] += " Изменённое условие."
+    with pytest.raises(ValueError, match="чужая метка topics"):
+        run(context, tasks, catalogues, client)
+    assert len(client.calls) == 2
+
+
+def test_review_flags_trigonometric_topic_for_arithmetic_without_changing_ids(tasks, catalogues):
+    from classification import classification_review_warnings
+    given = [dict(task, exams_id=12, topics_id=11) for task in tasks]
+    original = copy.deepcopy(given)
+    warnings = classification_review_warnings(given, exams_path=catalogues[0], topics_path=catalogues[1])
+    assert len(warnings) == 1 and "B1" in warnings[0]
+    assert "C1" not in warnings[0]
+    assert given == original
 
 
 @pytest.mark.parametrize("size", [1, 19, 20, 21])

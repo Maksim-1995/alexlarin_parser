@@ -63,6 +63,8 @@
       line-height: 1.5;
       white-space: pre-wrap;
     }
+    .task-body table { border-collapse: collapse; white-space: normal; margin: 8px 0; }
+    .task-body th, .task-body td { border: 1px solid #ccd3db; padding: 5px 8px; }
     .task-meta {
       margin-top: 10px;
       padding-top: 8px;
@@ -101,8 +103,12 @@
     }
 
     function renderTaskText(value) {
-      // Формулы и знаки сравнения остаются текстом. Разрешён только перенос <br>.
-      return escapeHtml(value).replace(/&lt;br\s*\/?&gt;/gi, '<br>');
+      // Малый список тегов без атрибутов: подпункты и таблицы из условий.
+      // Все остальные HTML-конструкции остаются обычным текстом.
+      return escapeHtml(value)
+        .replace(/&amp;(lt|gt|amp|quot|#39);/g, '&$1;')
+        .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
+        .replace(/&lt;(\/?)(table|tr|th|td)&gt;/gi, '<$1$2>');
     }
 
     function renderAbout() {

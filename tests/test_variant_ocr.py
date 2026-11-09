@@ -298,3 +298,13 @@ def test_changed_catalogue_files_cannot_invalidate_ocr(context, sources, client,
     catalog.write_text("id,name,parent\n1,Математика,0\n2,Алгебра,1\n", encoding="utf8")
     recognize(context, sources, client)
     assert len(client.calls) == 2
+def test_missing_published_answer_keeps_valid_conditions_and_marks_review():
+    from variant_ocr import validate_page
+    result = validate_page({
+        "page_num": 1,
+        "tasks": [{"source_label": "C1", "condition": "Условие", "continuation": False}],
+        "answers": {"C1": ""}, "issues": [],
+    }, 1, ["C1"], ["C1"], has_answer_images=True)
+    assert len(result["tasks"]) == 1
+    assert result["answers"] == {}
+    assert "C1" in result["issues"][0]

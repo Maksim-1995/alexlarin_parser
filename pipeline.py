@@ -6,7 +6,7 @@ from pathlib import Path
 import time
 import uuid
 
-from classification import classify_variant, load_catalog
+from classification import classification_review_warnings, classify_variant, load_catalog
 from pipeline_io import atomic_json, file_sha256, fingerprint, json_value, read_json
 from provider import DeepSeekClient, DeepSeekSettings, PaidCallsBlocked, usage_summary
 from variant_export import export_variant
@@ -185,6 +185,9 @@ def run_batch(base_dir, contexts, *, client=None, fresh_ai=False, local_only=Fal
                                                   topics_path=base_dir / "data" / "topics.csv", cache_dir=cache_dir)
                     for task in tasks:
                         task.update(classified[task["task_num"]])
+                    state["warnings"].extend(classification_review_warnings(
+                        tasks, exams_path=base_dir / "data" / "exams.csv", topics_path=base_dir / "data" / "topics.csv",
+                    ))
                 with stage("EXPORT"):
                     result = export_variant(attempt_context, tasks, sources["metadata"], pdf_path=sources["pdf_path"])
                     state["warnings"].extend(result.get("warnings", []))
@@ -194,11 +197,20 @@ def run_batch(base_dir, contexts, *, client=None, fresh_ai=False, local_only=Fal
                 state["review_fingerprint"] = fingerprint({
                     "variant_key": context.variant_key, "pdf_sha256": file_sha256(sources["pdf_path"]),
                     "tasks": tasks, "metadata": sources["metadata"],
+                    "image_hashes": {Path(p).name: file_sha256(p) for p in result["image_files"]},
+                    "format_code_sha256": {
+                        name: file_sha256(Path(__file__).parent / name) for name in
+                        ("variant_export.py", "exporter.py", "latex_format.py", "task_html.py")
+                    },
                 })
                 review = read_json(context.debug_dir / "content_review.json")
+                matching_review = isinstance(review, dict) and review.get("fingerprint") == state["review_fingerprint"]
+                if matching_review:
+                    findings = review.get("findings", [])
+                    if isinstance(findings, list) and all(isinstance(f, str) for f in findings):
+                        state["warnings"].extend(findings)
                 state["content_reviewed"] = bool(
-                    isinstance(review, dict) and review.get("approved") is True
-                    and review.get("fingerprint") == state["review_fingerprint"]
+                    matching_review and review.get("approved") is True
                 )
                 if not state["content_reviewed"]:
                     state["warnings"].append("Требуется содержательная сверка формул, ответов, рисунков и тем по источникам")
