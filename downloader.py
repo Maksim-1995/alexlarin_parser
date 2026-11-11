@@ -1,9 +1,10 @@
 """Загрузка исходников с проверкой и повторным использованием локальных файлов."""
 
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 
 import requests
+
+from pipeline_io import atomic_bytes
 
 
 def download_bytes(url, timeout=30):
@@ -32,6 +33,9 @@ def load_source(url, path, validate):
     ``validate`` разбирает байты и возвращает нужные вызывающему данные.
     Непригодный исходник отклоняется через ValueError. Новый файл заменяет
     прежний только после проверки, поэтому страница ошибки не попадёт в кэш.
+
+    Это базовый загрузчик для сохранённых плоских исходников. Связь файла
+    с вариантом, URL и хешем дополнительно проверяет variant_sources.
     """
     path = Path(path)
     local_error = None
@@ -63,15 +67,6 @@ def load_source(url, path, validate):
     except ValueError as error:
         raise ValueError(f"Непригодный исходник {url}: {error}") from error
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    pending = None
-    try:
-        with NamedTemporaryFile(dir=path.parent, prefix=path.name + ".", suffix=".tmp", delete=False) as target:
-            pending = Path(target.name)
-            target.write(data)
-        pending.replace(path)
-    finally:
-        if pending is not None:
-            pending.unlink(missing_ok=True)
+    atomic_bytes(path, data)
     print(f"Исходник сохранён: {path}", flush=True)
     return result

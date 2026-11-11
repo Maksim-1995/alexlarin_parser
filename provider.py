@@ -1,4 +1,9 @@
-"""Единый прямой DeepSeek-клиент: одна HTTP-попытка, без скрытых повторов."""
+"""Общий прямой DeepSeek-транспорт для OCR и классификации.
+
+Клиент отвечает за единственную HTTP-попытку, проверку оболочки ответа
+и учёт вызовов. Проверка схем задач, кэши и решение о возобновлении остаются
+в вызывающих этапах. Секрет не входит в identity и диагностические файлы.
+"""
 
 import json
 import os
@@ -15,7 +20,12 @@ from pipeline_io import atomic_json
 
 
 def load_env(path):
-    """Читаем только KEY=value, не исполняя shell; окружение имеет приоритет."""
+    """Добавить KEY=value из файла в окружение, сохранив уже заданные ключи.
+
+    Поддерживаются export, внешние кавычки и комментарии; shell-команды
+    и подстановка переменных не исполняются. Отсутствующий файл пропускается,
+    прочие ошибки чтения распространяются. Сам файл не изменяется.
+    """
     path = Path(path)
     if not path.is_file():
         return
@@ -38,6 +48,13 @@ def load_env(path):
 
 @dataclass(frozen=True)
 class DeepSeekSettings:
+    """Неизменяемые настройки транспорта и рендеринга OCR.
+
+    Тайм-ауты заданы в секундах, dpi — разрешение изображений страниц.
+    Thinking OCR всегда отключён, классификация имеет отдельную настройку.
+    Ключ скрыт из repr; публичная identity содержит только параметры модели,
+    влияющие на совместимость кэшей. DPI учитывается этапом OCR отдельно.
+    """
     api_key: str = field(default="", repr=False)
     base_url: str = "https://api.deepseek.com"
     model: str = "deepseek-flash"
@@ -48,6 +65,7 @@ class DeepSeekSettings:
     dpi: int = 300
 
     def __post_init__(self):
+        """Отклонить неверный thinking, неположительные лимиты и не-HTTPS URL."""
         if self.classification_thinking not in {"disabled", "enabled"}:
             raise ValueError("DEEPSEEK_CLASSIFICATION_THINKING: disabled либо enabled")
         if min(self.connect_timeout, self.read_timeout, self.max_tokens, self.dpi) <= 0:
@@ -57,6 +75,12 @@ class DeepSeekSettings:
 
     @classmethod
     def from_env(cls, base_dir=None):
+        """Собрать настройки DEEPSEEK_* и OCR_DPI без обращения к API.
+
+        Если base_dir задан, сначала прочитать его .env через load_env;
+        существующие переменные окружения сохраняют приоритет. Неверные
+        числа и значения настроек вызывают ValueError при создании объекта.
+        """
         if base_dir is not None:
             load_env(Path(base_dir) / ".env")
         return cls(
@@ -72,6 +96,12 @@ class DeepSeekSettings:
         )
 
     def identity(self, stage):
+        """Вернуть параметры провайдера для OCR или классификации без ключа.
+
+        Поле thinking для OCR фиксировано, для классификации берётся
+        из настроек. Тайм-ауты не влияют на содержимое ответа; DPI хранится
+        отдельно в схеме рендеринга страницы, поэтому этих полей здесь нет.
+        """
         return {
             "provider": "deepseek-direct", "base_url": self.base_url,
             "model": self.model, "temperature": 0, "max_tokens": self.max_tokens,
@@ -81,15 +111,28 @@ class DeepSeekSettings:
 
 
 class ProviderError(RuntimeError):
-    """Новая попытка возможна только при явном повторном запуске."""
+    """Ошибка сети, HTTP или оболочки ответа без автоматического повтора."""
 
 
 class PaidCallsBlocked(ProviderError):
-    """Общая ошибка ключа, доступа или баланса прекращает весь пакет."""
+    """Общая ошибка ключа, доступа или баланса запрещает новые вызовы клиента."""
 
 
 class DeepSeekClient:
+    """Одна HTTP-сессия и общий журнал попыток для обоих AI-этапов.
+
+    counter хранит число попыток по этапам, attempts — их длительность,
+    статус и доступный usage. Это журнал текущего клиента, а не история
+    кэшей. Ошибка авторизации/баланса сохраняет blocked: следующие запросы
+    отклоняются до HTTP. Пайплайн закрывает сессию через close.
+    """
+
     def __init__(self, settings, *, session=None, counter=None):
+        """Сохранить настройки и счётчик; создать сессию без HTTP-повторов.
+
+        Переданный session позволяет подменять транспорт в локальных тестах;
+        его адаптеры не перенастраиваются. Без counter создаётся новый счётчик.
+        """
         self.settings = settings
         self.session = session or requests.Session()
         if session is None:
@@ -99,9 +142,27 @@ class DeepSeekClient:
         self.blocked = None
 
     def close(self):
+        """Закрыть HTTP-сессию, включая явно переданную при создании клиента."""
         self.session.close()
 
     def request_json(self, messages, *, stage, debug_dir):
+        """Отправить один chat/completions запрос и вернуть JSON-объект content.
+
+        messages — готовые сообщения с текстом/изображениями; stage задаёт
+        ocr или classification. Сериализация запроса и начальная запись
+        диагностики выполняются до увеличения счётчика. Затем учитывается
+        каждая HTTP-попытка, включая ошибку и тайм-аут, без скрытых повторов.
+
+        debug_dir получает журнал попытки и ответ API без секретного ключа.
+        HTTP-успех требует непустого JSON content и finish_reason=stop;
+        статус RECEIVED ещё не подтверждает схему или точность задач.
+        Их проверяет вызывающий этап перед записью своего кэша.
+
+        PaidCallsBlocked означает отсутствующий ключ либо HTTP 401/402/403
+        и блокирует следующие вызовы. ProviderError означает ошибку сети,
+        HTTP или ответа. Неверный stage/несериализуемый запрос и ошибки
+        записи диагностики также распространяются, не маскируясь успехом.
+        """
         if stage not in {"ocr", "classification"}:
             raise ValueError("Неизвестный этап AI")
         if self.blocked:
@@ -194,6 +255,11 @@ class DeepSeekClient:
 
 
 def numeric_usage(value):
+    """Вернуть известные неотрицательные целые счётчики токенов или None.
+
+    Допускается частичный usage. Неизвестные поля и неверные значения,
+    включая bool, отбрасываются; входной словарь не изменяется.
+    """
     if not isinstance(value, dict):
         return None
     result = {key: value[key] for key in (
@@ -203,7 +269,12 @@ def numeric_usage(value):
 
 
 def usage_summary(attempts):
-    """Неизвестный usage остаётся неизвестным; стоимость без тарифа не выдумываем."""
+    """Суммировать известные токены и посчитать попытки с неполным usage.
+
+    При неизвестных данных суммы отражают только доступные поля, а
+    unknown_usage_attempts показывает неполноту. Стоимость остаётся None:
+    отсутствие usage или тарифа не превращается в нулевую стоимость.
+    """
     known = [u for a in attempts if (u := numeric_usage(a.get("usage"))) is not None]
     return {
         "prompt_tokens": sum(u.get("prompt_tokens", 0) for u in known),

@@ -12,7 +12,8 @@ import re
 import unicodedata
 from pathlib import Path
 from functools import partial
-from tempfile import NamedTemporaryFile
+
+from pipeline_io import atomic_json, fingerprint as _variant_fingerprint
 
 
 MODEL = "gemini-3.5-flash-lite"
@@ -105,9 +106,15 @@ SCHEMA = {
 
 
 class Catalog(list):
-    """Ветка справочника с полной структурой для проверки путей и новых тем."""
+    """Потомки выбранного корня и полный справочник для проверки дерева.
+
+    Элементы списка содержат id/name/parent/path/is_leaf. ``records`` хранит
+    все узлы исходного CSV, включая корень и другие предметы: сокращение
+    списка кандидатов не должно превращать родителя в допустимый лист.
+    """
 
     def __init__(self, rows, records, root_id):
+        """Сохранить строки ветки, полную карту ID и идентификатор корня."""
         super().__init__(rows)
         self.records = records
         self.root_id = root_id
@@ -134,7 +141,15 @@ def normalize_catalog_id(value, *, allow_empty=False):
 
 
 def load_catalog(path, *, name_column, parent_column, root_id):
-    """Проверить весь CSV, построить пути и только затем выделить ветку."""
+    """Прочитать CSV и вернуть ``Catalog`` потомков корня без самого корня.
+
+    Названия колонок передаются явно, поскольку exams и topics имеют разные
+    схемы. Для каждого потомка вычисляются полный путь внутри ветки и
+    is_leaf; наличие детей проверяется по всем нормализованным ID в CSV.
+    ValueError означает отсутствующие колонки/корень, неверные или повторные
+    ID, пустое название, потерянного родителя, цикл либо пустую ветку.
+    Повреждения вне выбранной ветки тоже отклоняются до обращения к модели.
+    """
     records = {}
     with Path(path).open(encoding="utf-8-sig", newline="") as source:
         reader = csv.DictReader(source)
@@ -201,7 +216,13 @@ def load_catalog(path, *, name_column, parent_column, root_id):
 
 
 def allowed_categories(rows, prefix):
-    """Один отбор используется и для запроса, и для проверки API/кэша."""
+    """Вернуть только конечных потомков корня exams (E: 2) или topics (T: 1).
+
+    С ``Catalog`` родительские связи проверяются по полному CSV, даже если
+    кандидатов в rows осталось меньше. Лист может находиться на любой
+    глубине. Тот же отбор используется в запросе и при проверке ответа/кэша.
+    Неизвестный prefix вызывает ValueError; входной список не изменяется.
+    """
     roots = {"E": 2, "T": 1}
     if prefix not in roots:
         raise ValueError(f"Неизвестный справочник: {prefix}")
@@ -227,7 +248,12 @@ def allowed_categories(rows, prefix):
 
 
 def build_category_choices(rows, prefix):
-    """Создать подписи допустимых категорий, сохранив полные пути."""
+    """Вернуть отображение ``E/T | путь`` в ID для совместимого протокола.
+
+    Включаются только допустимые листья. Полные пути сохраняют смысл темы,
+    а совпадающие подписи получают различающие суффиксы. Эти подписи
+    используются старым classify_tasks; classify_variant создаёт E/T-коды.
+    """
     records = {row["id"]: row for row in rows}
     choices = {}
 
@@ -262,7 +288,13 @@ def normalize_topic_name(value):
 
 
 def resolve_new_topic(value, topics):
-    """Проверить название; однозначное совпадение листа заменить его ID."""
+    """Вернуть ID совпавшего математического листа или новую тему строкой.
+
+    Название нормализуется для поиска существующего листа. Неоднозначное
+    совпадение, название родителя/чужой темы, заглушка и недопустимый формат
+    вызывают ValueError. Осмысленное новое название остаётся строкой;
+    семантическое отсутствие подходящей темы этот валидатор не доказывает.
+    """
     if not isinstance(value, str):
         raise ValueError("Название новой темы должно быть строкой")
     name = " ".join(value.split())
@@ -316,7 +348,13 @@ def resolve_new_topic(value, topics):
 
 
 def decode_category_choices(items, exam_choices, topic_choices, topics=None):
-    """Преобразовать подписи в ID, а новую тему — в проверенное название."""
+    """Декодировать список записей совместимого протокола выбора категорий.
+
+    На входе task_num/exam_choice/topic_kind/topic_choice, на выходе список
+    task_num/exams_id/topics_id. Неизвестные подписи и неверная структура
+    вызывают ValueError; темы двух справочников проверяются раздельно.
+    Полноту набора задач затем проверяет validate_classification.
+    """
     if not isinstance(items, list):
         raise ValueError("Ответ должен быть JSON-массивом")
 
@@ -357,7 +395,12 @@ def decode_category_choices(items, exam_choices, topic_choices, topics=None):
 
 
 def prepare_tasks(tasks):
-    """Подготовить только номера и условия, сохранив исходные данные."""
+    """Подготовить копии task_num/condition для старого набора строго 1–19.
+
+    Сортирует результат по номеру, не меняя входные задачи. Неполный набор,
+    повторные номера, неверные типы и пустые условия вызывают ValueError.
+    Для произвольного варианта используется prepare_variant_tasks.
+    """
     prepared = []
     for task in tasks:
         if not isinstance(task, dict):
@@ -376,7 +419,14 @@ def prepare_tasks(tasks):
 
 
 def validate_classification(items, exams, topics, *, task_numbers=None):
-    """Проверить контракт; математический смысл выбора требует отдельной сверки."""
+    """Проверить ID и вернуть ``{task_num: {exams_id, topics_id}}``.
+
+    Каждый ожидаемый номер должен встретиться ровно один раз. По умолчанию
+    ожидается старый набор 1–19; task_numbers задаёт набор текущего варианта.
+    Числовые ID обязаны быть листьями своей ветки, новая строковая тема
+    проходит resolve_new_topic. Ошибки контракта вызывают ValueError.
+    Математический смысл формально допустимого выбора требует сверки.
+    """
     expected_numbers = TASK_NUMBERS if task_numbers is None else set(task_numbers)
     if not isinstance(items, list):
         raise ValueError("Классификация должна быть JSON-массивом")
@@ -412,7 +462,12 @@ def validate_classification(items, exams, topics, *, task_numbers=None):
 
 
 def request_gemini(prompt, *, model, schema, request_counter=None):
-    """Сделать один вызов generate_content без повторов HTTP в SDK."""
+    """Совместимый Gemini-транспорт: один generate_content без повторов SDK.
+
+    Возвращает необработанный текст ответа; JSON/ID проверяет classify_tasks.
+    Ключ читается из GEMINI_API_KEY, счётчик растёт перед вызовом SDK.
+    Основной пакетный поток использует общий прямой DeepSeek-клиент.
+    """
     requests_used = 0
     try:
         api_key = os.getenv("GEMINI_API_KEY")
@@ -456,7 +511,14 @@ def classify_tasks(
     tasks, exams_path, topics_path, cache_path, *, model=MODEL,
     request=None, request_counter=None,
 ):
-    """Получить две метки на задачу: 0 запросов с кэшем, иначе ровно 1."""
+    """Совместимый классификатор набора 1–19 с историческим Gemini-кэшем.
+
+    Возвращает {task_num: {exams_id, topics_id}}. Точный проверенный кэш
+    исключает запрос; иначе выполняется один вызов request(prompt, model=)
+    либо старого транспорта. Ошибка API поднимается как RuntimeError,
+    неверный контракт — как ValueError; прежний кэш сохраняется при сбое.
+    Для основного потока и произвольного числа задач есть classify_variant.
+    """
     exams = load_catalog(
         exams_path,
         name_column="name_of_Exam",
@@ -498,6 +560,8 @@ def classify_tasks(
         },
         "input": payload,
     }
+    # Исторический отпечаток включает пробелы JSON. Компактный fingerprint
+    # нового протокола здесь изменил бы совместимость проверенных кэшей 542.
     serialized = json.dumps(identity, ensure_ascii=False, sort_keys=True)
     fingerprint = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
     cache_path = Path(cache_path)
@@ -569,20 +633,7 @@ def classify_tasks(
         "tasks": items,
         "choices": selected,
     }
-    pending = None
-    try:
-        # Уникальное имя не даёт параллельным запускам перезаписать
-        # промежуточный файл друг друга. Замена в той же папке атомарна.
-        with NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=cache_path.parent,
-            prefix=cache_path.name + ".", suffix=".tmp", delete=False,
-        ) as target:
-            pending = Path(target.name)
-            json.dump(cached, target, ensure_ascii=False, indent=2)
-        pending.replace(cache_path)
-    finally:
-        if pending is not None:
-            pending.unlink(missing_ok=True)
+    atomic_json(cache_path, cached)
     print(f"Классификация сохранена: {cache_path}", flush=True)
     return result
 
@@ -711,7 +762,13 @@ VARIANT_SCHEMA = {
 
 
 def prepare_variant_tasks(tasks):
-    """Подготовить произвольное число задач, сохранив их исходные метки."""
+    """Вернуть отсортированные копии task_num/condition/source_label.
+
+    Нужен непустой список с номерами 1..N, уникальными исходными метками
+    и непустыми условиями. Неверный вход вызывает ValueError до модели.
+    Ответы, рисунки и технические поля не передаются в классификацию;
+    исходные словари задач не изменяются.
+    """
     if not isinstance(tasks, list) or not tasks:
         raise ValueError("Нужен непустой список задач одного варианта")
     prepared = []
@@ -736,35 +793,23 @@ def prepare_variant_tasks(tasks):
     return sorted(prepared, key=lambda item: item["task_num"])
 
 
-def _variant_fingerprint(value):
-    serialized = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-
-
-def _write_variant_cache(path, data):
-    """Заменить лишь полностью сериализованный файл; старый кэш не теряется."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    pending = None
-    try:
-        with NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=path.parent,
-            prefix=path.name + ".", suffix=".tmp", delete=False,
-        ) as target:
-            pending = Path(target.name)
-            json.dump(data, target, ensure_ascii=False, indent=2)
-        pending.replace(path)
-    finally:
-        if pending is not None:
-            pending.unlink(missing_ok=True)
-
-
 def classify_variant(context, tasks, client, *, exams_path, topics_path, cache_dir=None):
     """Классифицировать один вариант: один запрос либо ноль при точном кэше.
 
-    Ошибка API не перехватывается здесь: общий запуск должен отличать ошибку
-    авторизации/баланса от ошибки отдельного варианта. Невалидная структура
-    не сохраняется как готовая и не запускает автоматический второй запрос.
-    Семантическое соответствие новой темы условию проверяется при ревью.
+    tasks содержит task_num/condition/source_label, context задаёт вариант,
+    исходный URL и пути. Возвращает {task_num: {exams_id, topics_id}}, где
+    exams_id — числовой лист, topics_id — числовой лист или новая тема.
+    Модель выбирает E/T-коды; ответ декодируется в раздельных пространствах
+    справочников. Совместимые прежние числовые ответы тоже проверяются.
+
+    classification.json в cache_dir или context.cache_dir связан с точной
+    identity условий, справочников, варианта, провайдера и протокола. В нём
+    хранятся исходный ответ и проверенные ID. Только проверенный результат
+    атомарно заменяет кэш; ошибка не запускает дополнительный запрос.
+
+    ValueError означает неверные данные, дерево или ответ модели. Ошибки
+    API распространяются вызывающему коду, чтобы он отличал блокировку
+    всего пакета от сбоя одного варианта. Семантика требует отдельного ревью.
     """
     exams_path, topics_path = Path(exams_path), Path(topics_path)
     exams = load_catalog(
@@ -814,6 +859,7 @@ def classify_variant(context, tasks, client, *, exams_path, topics_path, cache_d
     numbers = {item["task_num"] for item in prepared}
 
     def validate_response(response):
+        """Декодировать E/T-метки и проверить полный набор задач варианта."""
         if not isinstance(response, dict) or set(response) != {"tasks"}:
             raise ValueError("Классификация должна содержать только JSON-поле tasks")
         if not isinstance(response["tasks"], list):
@@ -864,7 +910,7 @@ def classify_variant(context, tasks, client, *, exams_path, topics_path, cache_d
             f"Прежний кэш сохранён; автоматического исправления нет. Причина: {error}"
         ) from error
     normalized = [{"task_num": number, **result[number]} for number in sorted(result)]
-    _write_variant_cache(cache_path, {
+    atomic_json(cache_path, {
         "identity": identity,
         "fingerprint": fingerprint,
         "requests_used": 1,
@@ -880,6 +926,8 @@ def classification_review_warnings(tasks, *, exams_path, topics_path):
     Пилот выявил выбор тригонометрических тем для рациональных задач с
     параметром и текстовых арифметических тем для чтения диаграмм. Проверка
     не доказывает семантическую точность остальных классификаций.
+    Возвращает список замечаний без изменения задач и без модельных вызовов;
+    ошибки чтения и структуры справочников распространяются вызывающему коду.
     """
     exams = load_catalog(exams_path, name_column="name_of_Exam", parent_column="parent_of_exam", root_id=2)
     topics = load_catalog(topics_path, name_column="name", parent_column="parent", root_id=1)

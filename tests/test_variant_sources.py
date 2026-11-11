@@ -8,6 +8,7 @@ import pytest
 import requests
 
 import downloader
+import pipeline_io
 import variant_sources
 from variant_sources import (
     VariantContext, discover_catalog, select_variants, parse_variant_html,
@@ -39,6 +40,40 @@ def png():
     pixmap = pymupdf.Pixmap(pymupdf.csRGB, (0, 0, 20, 20), False)
     pixmap.clear_with(255)
     return pixmap.tobytes("png")
+
+
+@pytest.mark.parametrize("source_manifest", [False, True])
+def test_shared_atomic_json_preserves_existing_formats(tmp_path, source_manifest):
+    value = {"source_label": "В1", "condition": r"$\frac{1}{2}$", "pages": [1, 2]}
+    path = tmp_path / "nested" / "cache.json"
+    write = variant_sources.atomic_json if source_manifest else pipeline_io.atomic_json
+
+    write(path, value)
+
+    expected = json.dumps(value, ensure_ascii=False, indent=2)
+    if source_manifest:
+        expected += "\n"
+    assert path.read_bytes() == expected.encode("utf-8")
+    assert list(path.parent.iterdir()) == [path]
+
+
+def test_shared_atomic_json_preserves_previous_cache_when_replace_fails(tmp_path, monkeypatch):
+    path = tmp_path / "cache.json"
+    path.write_bytes(b'{"checked": true}')
+    previous = path.read_bytes()
+
+    def fail_replace(pending, destination):
+        assert destination == path
+        assert json.loads(pending.read_text()) == {"checked": False}
+        assert path.read_bytes() == previous
+        raise OSError("Замена кэша недоступна")
+
+    monkeypatch.setattr(Path, "replace", fail_replace)
+    with pytest.raises(OSError, match="Замена кэша"):
+        variant_sources.atomic_json(path, {"checked": False})
+
+    assert path.read_bytes() == previous
+    assert list(tmp_path.iterdir()) == [path]
 
 
 def test_context_keys_paths_and_additional_versions_are_isolated(tmp_path):

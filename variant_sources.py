@@ -11,7 +11,6 @@ from html.parser import HTMLParser
 import json
 from pathlib import Path
 import re
-from tempfile import NamedTemporaryFile
 from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
 
 import jsbeautifier
@@ -20,6 +19,7 @@ import pymupdf
 import requests
 
 import downloader
+from pipeline_io import atomic_bytes, atomic_json as _atomic_json
 
 
 ARCHIVE_URL = "https://alexlarin.net/trvar.html"
@@ -40,6 +40,7 @@ def normalize_label(label):
 
 
 def _canonical_url(url):
+    """Нормализовать адрес сайта, сохранив путь и query конкретной версии."""
     parts = urlsplit(unescape(url))
     if parts.scheme not in {"http", "https"} or parts.hostname not in {"alexlarin.net", "www.alexlarin.net"}:
         raise ValueError(f"Нужна ссылка на alexlarin.net: {url}")
@@ -50,6 +51,13 @@ def _canonical_url(url):
 
 @dataclass
 class VariantContext:
+    """Идентичность, источники и пути одного варианта без общих изменяемых данных.
+
+    Ключ различает год, исходный code и дополнительные версии URL. Свойства
+    путей ничего не создают на диске. ``source_urls`` заполняется при разборе
+    HTML, ``download_count`` считает фактические HTTP-попытки этого контекста,
+    включая ошибки и отдельные Range-запросы.
+    """
     variant_key: str
     number: int
     code: str
@@ -61,6 +69,7 @@ class VariantContext:
 
     @classmethod
     def from_url(cls, url, base_dir):
+        """Проверить ссылку варианта и вычислить его устойчивый ключ и пути."""
         url = _canonical_url(url)
         path = Path(unquote(urlsplit(url).path))
         match = CODE_RE.fullmatch(path.stem)
@@ -79,56 +88,56 @@ class VariantContext:
 
     @property
     def variant_dir(self):
+        """Каталог исходников, кэшей и проверочных данных одного варианта."""
         return self.base_dir / "input" / "variants" / self.variant_key
 
     @property
     def source_dir(self):
+        """Сохранённые HTML/PDF/JS и опубликованные изображения ответов."""
         return self.variant_dir / "source"
 
     @property
     def cache_dir(self):
+        """Проверенные кэши OCR и классификации текущего варианта."""
         return self.variant_dir / "cache"
 
     @property
     def debug_dir(self):
+        """Ответы API, ошибки и данные для проверки вне итоговой выдачи."""
         return self.variant_dir / "debug"
 
     @property
     def output_dir(self):
+        """Итоговая книга Excel и только относящиеся к варианту рисунки."""
         return self.base_dir / "output" / self.variant_key
 
     @property
     def archive_path(self):
+        """Отдельный итоговый ZIP в общем каталоге archives."""
         return self.base_dir / "archives" / f"{self.variant_key}_result.zip"
 
     @property
     def pdf_path(self):
+        """Локальный PDF, соответствующий исходному коду варианта."""
         return self.source_dir / f"{self.code}.pdf"
 
     @property
     def html_path(self):
+        """Локальная страница с проверяемыми ссылками и ответами варианта."""
         return self.source_dir / f"{self.code}.html"
 
 
-def atomic_bytes(path, data):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    pending = None
-    try:
-        with NamedTemporaryFile(dir=path.parent, prefix=path.name + ".", suffix=".tmp", delete=False) as out:
-            pending = Path(out.name)
-            out.write(data)
-        pending.replace(path)
-    finally:
-        if pending is not None:
-            pending.unlink(missing_ok=True)
-
-
 def atomic_json(path, data):
-    atomic_bytes(path, (json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode("utf8"))
+    """Сохранить JSON общим писателем с прежним переводом строки в конце.
+
+    Имя остаётся доступным из variant_sources для совместимости вызовов
+    и подмен в тестах; сама атомарная запись реализована в pipeline_io.
+    """
+    _atomic_json(path, data, trailing_newline=True)
 
 
 def decode_html(data):
+    """Декодировать сохранённый UTF-8 HTML или старую страницу Windows-1251."""
     try:
         return data.decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -187,10 +196,17 @@ class SourceHTMLParser(HTMLParser):
 
     @property
     def title(self):
+        """Вернуть заголовок страницы с нормализованными пробелами."""
         return " ".join("".join(self.title_parts).split())
 
 
 def parse_variant_html(data, context):
+    """Проверить номер/год HTML и извлечь ссылки и ответы таблиц B/C.
+
+    Принимаются только ресурсы того же кода в каталоге текущей страницы.
+    Ответы сохраняются строками; исходные буквенные метки возвращаются
+    отдельно от канонических ключей B/C для последующей проверки.
+    """
     if not data.strip() or b"<" not in data:
         raise ValueError("Пустой исходник HTML")
     parser = SourceHTMLParser()
@@ -267,6 +283,11 @@ def discover_catalog(data, archive_url=ARCHIVE_URL):
 
 
 def load_catalogue(base_dir, *, local_only=False):
+    """Прочитать сохранённый каталог href или скачать и проверить недостающий.
+
+    В режиме ``local_only`` сеть запрещена; прежний файл заменяется только
+    после успешного разбора нового HTML и обнаружения ссылок вариантов.
+    """
     path = Path(base_dir) / "input" / "catalogue" / "trvar.html"
     if path.is_file():
         try:
@@ -284,6 +305,10 @@ def load_catalogue(base_dir, *, local_only=False):
 
 
 def select_variants(numbers, catalogue):
+    """Выбрать основные варианты в заданном порядке без подмены версиями 4*.
+
+    Отсутствующие и неоднозначные ссылки отклоняются до обработки вариантов.
+    """
     selected = []
     for number in numbers:
         choices = [entry for entry in catalogue if entry["number"] == int(number) and entry["code"] == f"trvar{int(number)}"]
@@ -294,7 +319,12 @@ def select_variants(numbers, catalogue):
 
 
 def task_positions(page):
-    """Основные метки PDF; подпункты А), Б), В) без числа не подходят."""
+    """Найти основные метки PDF и их координаты на отображаемой странице.
+
+    Возвращает каноническую и исходную метки с x/y/x1/y1 после поворота PDF.
+    Порядок соответствует меткам задач, а не порядку PDF text stream.
+    Подпункты А), Б), В) без числа основными задачами не считаются.
+    """
     positions = []
     words = page.get_text("words")
     visible_words = [pymupdf.Rect(*word[:4]) * page.rotation_matrix for word in words]
@@ -351,6 +381,13 @@ def task_positions(page):
 
 
 def inspect_pdf(data, context):
+    """Проверить PDF и собрать метки, страницы и геометрию для OCR/рисунков.
+
+    Количество задач определяется метками, а не вступительной инструкцией.
+    ``page_labels`` содержит только первые появления задач; повторная метка
+    продолжения остаётся в ``page_positions``. Недостаток текстового слоя
+    возвращается предупреждением и требует последующей проверки по изображению.
+    """
     if not data.startswith(b"%PDF-"):
         raise ValueError("Файл не похож на PDF")
     try:
@@ -407,6 +444,7 @@ def inspect_pdf(data, context):
 
 
 def validate_image(data):
+    """Проверить сигнатуру и декодирование PNG/JPEG, вернув исходные байты."""
     if not (data.startswith(b"\x89PNG\r\n\x1a\n") or data.startswith(b"\xff\xd8\xff")):
         raise ValueError("Файл не похож на PNG/JPEG опубликованных ответов")
     try:
@@ -419,6 +457,11 @@ def validate_image(data):
 
 
 def parse_script_answers(data):
+    """Распаковать JS и прочитать опубликованные ответы T<n> строками.
+
+    Число ответов не фиксируется: оно зависит от формата варианта.
+    Пустой разбор и повторяющиеся метки отклоняются без угадывания ответов.
+    """
     try:
         text = data.decode("utf-16") if data.startswith((b"\xff\xfe", b"\xfe\xff")) else data.decode("utf-8-sig")
         if packer.detect(text):
@@ -439,6 +482,7 @@ def parse_script_answers(data):
 
 
 def _manifest(context):
+    """Прочитать привязки файлов к URL/хешам только для текущего варианта."""
     path = context.source_dir / "source_manifest.json"
     try:
         data = json.loads(path.read_text(encoding="utf8"))
@@ -501,7 +545,13 @@ def download_ranged_source(context, url, *, chunk_size=8192):
 
 
 def _load(context, url, path, validate, *, local_only=False, semantic_identity=False):
-    """Проверенный source cache; никакого поиска подходящего файла соседнего варианта."""
+    """Вернуть проверенный источник, сохранив прежний файл при сбое загрузки.
+
+    Бинарный файл требует совпадения URL и SHA-256 в манифесте. Для HTML/PDF
+    ``semantic_identity`` допускает первичную привязку по содержимому; уже
+    существующая несовпадающая запись манифеста этим правилом не обходится.
+    Локальная миграция разрешена только по точному URL известного варианта 542.
+    """
     manifest = _manifest(context)
     record = manifest.get("files", {}).get(path.name)
     local_error = None
@@ -556,7 +606,13 @@ def _load(context, url, path, validate, *, local_only=False, semantic_identity=F
 
 
 def prepare_sources(context, *, local_only=False):
-    """Скачать только недостающие источники конкретного варианта без AI."""
+    """Подготовить проверенные источники и метаданные одного варианта без AI.
+
+    Возвращает PDF, опубликованные ответы, изображения ответов, основные метки
+    и геометрию страниц. Ошибка обязательных HTML/PDF останавливает этап;
+    недоступный дополнительный источник ответов попадает в ``warnings``,
+    чтобы сохранить условия и явно отметить неполноту результата.
+    """
     html = _load(context, context.source_url, context.html_path,
                  lambda data: parse_variant_html(data, context), local_only=local_only, semantic_identity=True)
     resources = html["resources"]

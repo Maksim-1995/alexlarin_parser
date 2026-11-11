@@ -1,4 +1,10 @@
-"""Постраничный OCR: один запрос на страницу, отдельные ответы и фрагменты."""
+"""Распознавание одного варианта по страницам с проверкой и возобновлением.
+
+Этап готовит изображения, проверяет ответы модели и сохраняет кэш каждой
+готовой страницы. Фрагменты затем объединяются по исходным меткам задач;
+опубликованные ответы хранятся отдельно от условий. Сетевой вызов, тайм-ауты
+и учёт попыток выполняет переданный клиент провайдера.
+"""
 
 import base64
 from pathlib import Path
@@ -38,6 +44,7 @@ continuation=false. Не повторяй текст предыдущей стр
 
 
 def _image_part(data):
+    """Упаковать PNG в image_url-часть запроса без записи промежуточного файла."""
     return {"type": "image_url", "image_url": {
         "url": "data:image/png;base64," + base64.b64encode(data).decode("ascii"),
         "detail": "original",
@@ -45,7 +52,12 @@ def _image_part(data):
 
 
 def render_scheme(page, dpi):
-    """Две колонки только при двух раздельных группах реальных начал задач."""
+    """Выбрать полную страницу или две колонки по координатам начал задач.
+
+    Возвращаемые области и параметры рендеринга входят в identity OCR-кэша.
+    Колонки используются только при двух раздельных группах меток с достаточным
+    зазором; обе области затем передаются в одном запросе для этой страницы.
+    """
     positions = task_positions(page)
     width, height = page.rect.width, page.rect.height
     starts = sorted({round(p["x"], 1) for p in positions})
@@ -62,6 +74,18 @@ def render_scheme(page, dpi):
 
 def validate_page(data, page_num, expected_labels, all_labels, previous_label=None,
                   *, has_answer_images=False):
+    """Проверить схему OCR-ответа и связи фрагментов, не оценивая точность формул.
+
+    ``expected_labels`` задаёт порядок новых задач страницы; None разрешает
+    обнаружить метки по изображению, когда текстовый слой PDF отсутствует.
+    Продолжение должно относиться к активной задаче, в том числе к последней
+    задаче предыдущей страницы из ``previous_label``. Исходная запись метки
+    сохраняется рядом с нормализованной B/C-меткой.
+
+    Поле answers допускается только при приложенном изображении опубликованных
+    ответов. Его метки относятся ко всему варианту, а не только этой странице.
+    Пустой опубликованный ответ становится замечанием для проверки.
+    """
     if not isinstance(data, dict) or set(data) != {"page_num", "tasks", "answers", "issues"}:
         raise ValueError("OCR: нужны page_num, tasks, answers и issues")
     if type(data["page_num"]) is not int or data["page_num"] != page_num:
@@ -124,6 +148,13 @@ def _public_page(result):
 
 
 def assemble_pages(pages, expected_labels):
+    """Собрать проверенные страницы в задачи с порядковыми task_num от единицы.
+
+    Страницы должны идти в порядке PDF. Продолжения дописываются к исходной
+    source_label с сохранением номеров страниц и всех фрагментов. Повторное
+    начало и противоречащие опубликованные ответы отклоняются. Замечания OCR
+    и нечитаемые места возвращаются в warnings, без восстановления догадками.
+    """
     tasks = {}
     answers, issues = {}, []
     for result in pages:
@@ -185,6 +216,17 @@ def read_legacy_542(context, sources):
 
 
 def recognize_variant(context, sources, client, *, cache_dir=None, allow_legacy=True):
+    """Распознать один вариант, используя совместимые кэши страниц без API.
+
+    Для каждой страницы без пригодного кэша выполняется один запрос через
+    переданный клиент. Опубликованные изображения ответов прикладываются только
+    к последней странице. После проверки ответ сохраняется атомарно: ошибка
+    следующей страницы не уничтожает уже готовые кэши и прежний общий результат.
+
+    ``cache_dir`` изолирует новый AI-прогон от рабочих кэшей. Старый проверенный
+    кэш Gemini допускается только для точного варианта 542, при allow_legacy
+    и без отдельного cache_dir; происхождение такого результата сохраняется.
+    """
     if allow_legacy and cache_dir is None:
         legacy = read_legacy_542(context, sources)
         if legacy:
@@ -226,6 +268,8 @@ def recognize_variant(context, sources, client, *, cache_dir=None, allow_legacy=
             identities.append(identity)
             path = cache_root / "ocr" / f"page_{page_num:03d}.json"
             cached = read_json(path)
+            # Совпадение identity необходимо, но недостаточно: даже готовый
+            # JSON кэша проходит те же проверки фрагментов, что и новый ответ.
             data = cached.get("response") if isinstance(cached, dict) and cached.get("identity") == identity else None
             if data is not None:
                 try:
@@ -258,11 +302,14 @@ def recognize_variant(context, sources, client, *, cache_dir=None, allow_legacy=
                                            stage="ocr", debug_dir=context.debug_dir)
                 result = validate_page(data, page_num, expected, all_labels, previous_label,
                                        has_answer_images=bool(attached))
+                # До этой точки неполный или структурно неверный ответ не
+                # становится готовой страницей для последующего возобновления.
                 atomic_json(path, {"identity": identity, "response": _public_page(result)})
             results.append(result)
             if result["tasks"]:
                 previous_label = result["tasks"][-1]["source_label"]
     combined = assemble_pages(results, all_labels)
+    # Общий результат заменяется лишь после успешной проверки всех страниц.
     atomic_json(cache_root / "conditions.json", {
         "variant_key": context.variant_key, "source_url": context.source_url,
         "page_identities_sha256": fingerprint(identities), **combined,
