@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import json
+from types import SimpleNamespace
 
 import pymupdf
 import pytest
@@ -138,6 +139,35 @@ def test_actual_pdf_labels_override_obsolete_instruction_and_do_not_merge_b1_c1(
     assert [p["original_label"] for p in result["page_positions"][0]] == ["B1.", "B14.", "C1.", "C6."]
 
 
+@pytest.mark.parametrize("dash", ["-", "‐", "‑", "‒", "–", "—", "−"])
+@pytest.mark.parametrize("last_year", [2013, 2014])
+def test_exam_year_range_uses_end_year_with_unicode_dashes(tmp_path, monkeypatch, dash, last_year):
+    """PDF7–12 используют U+2010; год URL не подменяется при несовпадении."""
+    context = VariantContext.from_url("https://alexlarin.net/ege/2013/trvar7.html", tmp_path)
+    header = f"Единый\u00a0государственный\u00a0экзамен, 2012{dash}{last_year}\u00a0г.\nТренировочный\u00a0вариант\u00a0№\u00a07"
+    page = SimpleNamespace(
+        rect=pymupdf.Rect(0, 0, 595, 842), rotation_matrix=pymupdf.Matrix(1, 1),
+        get_text=lambda kind=None: [] if kind == "words" else header,
+    )
+    class Document:
+        def __len__(self):
+            return 1
+        def __iter__(self):
+            return iter([page])
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+    monkeypatch.setattr(variant_sources.pymupdf, "open", lambda **kwargs: Document())
+    if last_year == 2013:
+        result = inspect_pdf(b"%PDF-test", context)
+        assert not any("год" in warning for warning in result["warnings"])
+        assert context.year == 2013
+    else:
+        with pytest.raises(ValueError, match="другому году"):
+            inspect_pdf(b"%PDF-test", context)
+
+
 def test_continuation_label_is_one_main_identity_across_pages(tmp_path):
     context = VariantContext.from_url("https://alexlarin.net/ege/2013/trvar1.html", tmp_path)
     with pymupdf.open() as document:
@@ -161,6 +191,22 @@ def test_split_label_across_pdf_blocks_uses_visual_adjacency_and_ignores_formula
     positions = task_positions(page)
     assert [p["source_label"] for p in positions] == ["B3", "B8"]
     assert positions[1]["original_label"] == "B8"
+
+
+def test_split_cyrillic_letter_in_sentence_with_year_is_not_task_label():
+    """В PDF7 «В 2008 году» начинается в body-indent рядом с меткой B13."""
+    words = [
+        (30, 20, 44, 30, "B1", 1, 0, 0),
+        (430, 200, 452, 214, "B13", 2, 0, 0),
+        (465, 202, 472, 212, "В", 2, 1, 0),
+        (475, 202, 495, 212, "2008", 2, 1, 1),
+        (499, 202, 520, 212, "году", 2, 1, 2),
+        (430, 300, 437, 310, "С", 3, 0, 0),
+        (438, 300, 443, 310, "1", 4, 0, 0),
+    ]
+    page = SimpleNamespace(get_text=lambda kind: words, rotation_matrix=pymupdf.Matrix(1, 1))
+
+    assert [item["source_label"] for item in task_positions(page)] == ["B1", "B13", "C1"]
 
 
 def test_rotated_pdf_positions_match_rendered_page_coordinates():

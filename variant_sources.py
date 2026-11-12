@@ -328,6 +328,8 @@ def task_positions(page):
     positions = []
     words = page.get_text("words")
     visible_words = [pymupdf.Rect(*word[:4]) * page.rotation_matrix for word in words]
+    label_columns = [visible_words[index].x0 for index, word in enumerate(words)
+                     if word[7] == 0 and re.fullmatch(r"[BВCС]\d+[.)]?", word[4], re.I)]
     for index, word in enumerate(words):
         x0, y0, x1, y1, value, block, line, word_num = word
         if word_num != 0:
@@ -343,6 +345,11 @@ def task_positions(page):
             # Сопоставляем только непосредственно соседние видимые глифы
             # на одной базовой линии, а не произвольную цифру из text stream.
             anchor = visible_words[index]
+            # Фраза «В 2008 году» тоже содержит соседние букву и цифры.
+            # При известных целых метках раздельная метка должна находиться
+            # на той же линии начал задач, а не внутри текста условия.
+            if label_columns and not any(abs(anchor.x0 - x) <= 6 for x in label_columns):
+                continue
             neighbors = [j for j, other in enumerate(words)
                          if re.fullmatch(r"\d+[.)]?", other[4])
                          and -1 <= visible_words[j].x0 - anchor.x1 <= 4
@@ -399,7 +406,10 @@ def inspect_pdf(data, context):
             number = re.search(r"(?:Тренировочный\s+)?вариант\s*№\s*(\d+)", text, re.I)
             if number and int(number[1]) != context.number:
                 raise ValueError("PDF относится к другому варианту")
-            year = re.search(r"(?:экзамен[,\s]+|ЕГЭ\s*[-–]?\s*)(20\d\d)(?:\s*[-–]\s*(20\d\d))?", text, re.I)
+            # В старых PDF диапазон 2012‐2013 напечатан с U+2010, а не
+            # ASCII-дефисом. Разделитель нормализуем только в поиске года:
+            # иначе первая половина диапазона ошибочно считается годом ЕГЭ.
+            year = re.search(r"(?:экзамен[,\s]+|ЕГЭ\s*[-–]?\s*)(20\d\d)(?:\s*[-‐‑‒–—−]\s*(20\d\d))?", text, re.I)
             exam_year = int(year[2] or year[1]) if year else None
             if year and exam_year != context.year:
                 raise ValueError("PDF относится к другому году")
