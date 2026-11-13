@@ -158,7 +158,7 @@ def test_missing_answer_exports_review_result_and_original_formula_is_unchanged(
     assert any("C1" in warning and "отсутствует" in warning for warning in result["warnings"])
 
 
-def test_verified_542_four_raster_images_remain_unchanged(tmp_path):
+def test_542_keeps_four_image_names_and_original_bytes_except_bitmap_with_soft_mask(tmp_path):
     pdf = Path(__file__).resolve().parents[1] / "input" / "trvar542.pdf"
     if not pdf.exists():
         pytest.skip("локальный проверенный PDF 542 не установлен")
@@ -173,6 +173,20 @@ def test_verified_542_four_raster_images_remain_unchanged(tmp_path):
     assert {key: value for key, value in actual.items() if value} == expected
     assert not warnings
     assert len(manifest) == 4
+    with pymupdf.open(pdf) as document:
+        for names in expected.values():
+            name = names[0]
+            xref = int(name.split("_")[1].split(".")[0])
+            if xref != 198:
+                assert (tmp_path / "images" / name).read_bytes() == document.extract_image(xref)["image"]
+            else:
+                # Старый файл198 сохранял сырые RGB и игнорировал soft mask.
+                # Новое извлечение корректно применяет её по общему правилу;
+                # существующие output/ZIP пользователя этот тест не трогает.
+                rendered = pymupdf.Pixmap(str(tmp_path / "images" / name))
+                assert rendered.pixel(0, 0) == (255, 255, 255)
+                entry = next(item for item in manifest if item["image_name"] == name)
+                assert entry["soft_mask"] > 0 and entry["rendered_placement"] is True
 
 
 def test_image_before_first_label_in_next_column_belongs_to_continued_task():
@@ -215,3 +229,88 @@ def test_table_preserves_cells_and_does_not_split_modulus_in_math():
     assert "<td>$|x|&lt;2$</td>" in rendered
     assert "<td>0,96</td>" in rendered
     assert rendered.count("<tr>") == 3
+
+
+def asymmetric_picture(*, transparent=False):
+    """Разные углы позволяют проверить поворот без решения задачи по картинке."""
+    with pymupdf.open() as document:
+        page = document.new_page(width=40, height=30)
+        page.draw_rect((0, 0, 20, 15), color=None, fill=(1, 0, 0))
+        page.draw_rect((30, 0, 40, 10), color=None, fill=(0, 0, 1))
+        return page.get_pixmap(alpha=transparent).tobytes("png")
+
+
+@pytest.mark.parametrize("page_rotation", [0, 90, 180, 270])
+def test_placed_bitmap_matches_pdf_rotation_and_soft_mask_without_nearby_text(tmp_path, page_rotation):
+    path = tmp_path / "masked.pdf"
+    with pymupdf.open() as document:
+        page = document.new_page(width=240, height=240)
+        page.insert_image((80, 80, 140, 160), stream=asymmetric_picture(transparent=True),
+                          rotate=90, keep_proportion=False)
+        page.insert_text((10, 20), "NEARBY TEXT MUST NOT BE EXPORTED")
+        page.set_rotation(page_rotation)
+        item = page.get_images(full=True)[0]
+        assert item[1] > 0  # Реальная soft mask, а не заранее белый фон.
+        rectangle, _ = page.get_image_rects(item[0], transform=True)[0]
+        rectangle *= page.rotation_matrix
+        expected = page.get_pixmap(matrix=pymupdf.Matrix(0.5, 0.5), clip=rectangle, alpha=False)
+        anchors = {1: [{"source_label": "B1", "x": rectangle.x0 - 2, "y": rectangle.y0 - 10}]}
+        document.save(path)
+    actual, warnings, manifest = extract_variant_images(
+        path, [{"source_label": "B1", "page_numbers": [1]}], tmp_path / "images", positions=anchors,
+    )
+    rendered = pymupdf.Pixmap(str(tmp_path / "images" / actual["B1"][0]))
+    assert (rendered.width, rendered.height) == (expected.width, expected.height)
+    assert rendered.samples == expected.samples
+    assert rendered.alpha == 0
+    assert not warnings
+    assert len(manifest) == 1
+    assert manifest[0]["soft_mask"] > 0 and manifest[0]["rendered_placement"] is True
+
+
+def test_same_xref_with_two_orientations_gets_two_correct_task_images_and_keeps_original_bytes(tmp_path):
+    path = tmp_path / "reused.pdf"
+    with pymupdf.open() as document:
+        page = document.new_page(width=300, height=350)
+        xref = page.insert_image((50, 60, 130, 120), stream=asymmetric_picture())
+        page.insert_image((50, 180, 110, 260), xref=xref, rotate=90, keep_proportion=False)
+        original = document.extract_image(xref)["image"]
+        expected = page.get_pixmap(matrix=pymupdf.Matrix(0.5, 0.5), clip=pymupdf.Rect(50, 180, 110, 260), alpha=False)
+        document.save(path)
+    anchors = {1: [{"source_label": "B1", "x": 30, "y": 40},
+                   {"source_label": "B2", "x": 30, "y": 160}]}
+    actual, warnings, manifest = extract_variant_images(
+        path, [{"source_label": label, "page_numbers": [1]} for label in ("B1", "B2")],
+        tmp_path / "images", positions=anchors,
+    )
+    assert len(actual["B1"]) == len(actual["B2"]) == 1
+    assert actual["B1"] != actual["B2"]
+    assert (tmp_path / "images" / actual["B1"][0]).read_bytes() == original
+    rotated = pymupdf.Pixmap(str(tmp_path / "images" / actual["B2"][0]))
+    assert rotated.samples == expected.samples
+    assert len(manifest) == 2 and not warnings
+
+
+def test_geometric_b1_inside_later_task_does_not_create_false_column_or_steal_images(tmp_path):
+    path = tmp_path / "geometric-label.pdf"
+    with pymupdf.open() as document:
+        document.new_page(width=842, height=595)
+        page = document.new_page(width=842, height=595)
+        for rectangle, colour in [((650, 60, 750, 120), (1, 0, 0)),
+                                   ((650, 210, 750, 270), (0, 1, 0)),
+                                   ((730, 460, 820, 530), (0, 0, 1))]:
+            page.insert_image(rectangle, stream=picture(colour))
+        document.save(path)
+    positions = {1: [{"source_label": "B1", "x": 30, "y": 40}],
+                 2: [{"source_label": "B3", "x": 30, "y": 40},
+                     {"source_label": "B8", "x": 438, "y": 40},
+                     {"source_label": "B9", "x": 438, "y": 180},
+                     {"source_label": "B1", "x": 525, "y": 204},
+                     {"source_label": "B11", "x": 438, "y": 440}]}
+    given = [{"source_label": label, "page_numbers": [1] if label == "B1" else [2]}
+             for label in ("B1", "B3", "B8", "B9", "B11")]
+    actual, warnings, manifest = extract_variant_images(path, given, tmp_path / "images", positions=positions)
+    assert actual["B1"] == []
+    assert {label: len(names) for label, names in actual.items() if names} == {"B8": 1, "B9": 1, "B11": 1}
+    assert [item["source_label"] for item in manifest] == ["B8", "B9", "B11"]
+    assert not warnings

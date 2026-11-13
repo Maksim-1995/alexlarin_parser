@@ -1,6 +1,7 @@
 """Изолированная сборка и проверка Excel, рисунков и ZIP одного варианта."""
 
 import json
+import math
 import re
 import shutil
 from html import escape
@@ -211,19 +212,83 @@ def _vector_rects(page):
     return result
 
 
+def _image_placement_identity(xref, soft_mask, width, height, matrix):
+    """Отличить ориентации одного XObject без зависимости от его положения.
+
+    У обычного рисунка сохраняются исходные байты. Поворот, отражение,
+    существенное растяжение и soft mask требуют отдельного рендера. Масштаб
+    и перенос сами по себе не создают ещё один файл одинакового рисунка.
+    """
+    a, b, c, d, _, _ = matrix
+    horizontal, vertical = math.hypot(a, b), math.hypot(c, d)
+    if horizontal <= 0 or vertical <= 0 or abs(a * d - b * c) < 1e-9:
+        raise ValueError(f"Вырожденная матрица рисунка xref={xref}")
+    ordinary = (not soft_mask and a > 0 and d > 0 and abs(b) < 1e-6 and abs(c) < 1e-6
+                and math.isclose(horizontal / width, vertical / height, rel_tol=0.02))
+    if ordinary:
+        return xref, "original"
+    return xref, soft_mask, tuple(round(value / horizontal, 7) for value in (a, b, c, d))
+
+
+def _render_image_placement(document, xref, soft_mask, width, height, matrix):
+    """Отрисовать только bitmap с его маской и матрицей, без текста PDF.
+
+    Отдельная страница содержит ровно один XObject. Его PDF-матрица
+    воспроизводит итоговую геометрию после page.rotation_matrix, включая
+    отражения и наклон. Это не снимок области условия или водяного знака.
+    """
+    pixmap = pymupdf.Pixmap(document, xref)
+    if pixmap.colorspace is not None and pixmap.colorspace.n != 3:
+        pixmap = pymupdf.Pixmap(pymupdf.csRGB, pixmap)
+    if soft_mask:
+        if pixmap.alpha:
+            pixmap = pymupdf.Pixmap(pixmap, 0)
+        pixmap = pymupdf.Pixmap(pixmap, pymupdf.Pixmap(document, soft_mask))
+    png = pixmap.tobytes("png")
+    bounds = pymupdf.Rect(0, 0, 1, 1) * matrix
+    a, b, c, d, e, f = matrix
+    e, f = e - bounds.x0, f - bounds.y0
+    # get_image_rects описывает изображение сверху вниз. В content stream
+    # PDF ось y направлена вверх, поэтому обе системы координат согласуются
+    # явно, без угадывания угла по ширине и высоте картинки.
+    pdf_matrix = (a, -b, -c, d, e + c, bounds.height - f - d)
+    density = max(width / math.hypot(a, b), height / math.hypot(c, d))
+    with pymupdf.open() as isolated:
+        page = isolated.new_page(width=bounds.width, height=bounds.height)
+        page.insert_image(page.rect, stream=png, keep_proportion=False)
+        resource_name = page.get_images(full=True)[0][7]
+        # PDF number syntax, в отличие от Python, не допускает экспоненту e-10.
+        coefficients = " ".join(f"{value:.10f}" for value in pdf_matrix)
+        isolated.update_stream(page.get_contents()[0],
+                               f"q\n{coefficients} cm\n/{resource_name} Do\nQ\n".encode("ascii"))
+        rendered = page.get_pixmap(matrix=pymupdf.Matrix(density, density),
+                                   colorspace=pymupdf.csRGB, alpha=False)
+        return {"ext": "png", "image": rendered.tobytes("png")}
+
+
 def extract_variant_images(pdf_path, tasks, images_dir, *, positions=None):
     """Сохранить рисунки с явной привязкой к source_label данного варианта."""
     images_dir = Path(images_dir)
     images_dir.mkdir(parents=True, exist_ok=True)
     by_label = {task["source_label"]: [] for task in tasks}
-    warnings, manifest, saved = [], [], {}
+    task_pages = {task["source_label"]: set(task.get("page_numbers") or ()) for task in tasks}
+    warnings, manifest, saved, placement_counts = [], [], {}, {}
     with pymupdf.open(pdf_path) as document:
         for page_number, page in enumerate(document, 1):
             anchors = _page_positions(page, page_number, positions)
+            # Геометрическое обозначение B1 внутри B9 может оказаться первым
+            # словом PDF text block. OCR уже установил реальные страницы B1:
+            # такая внутренняя надпись не должна создавать новую колонку.
+            # У настоящего продолжения текущая страница есть в page_numbers.
+            anchors = [anchor for anchor in anchors if anchor["source_label"] in by_label
+                       and (not task_pages[anchor["source_label"]]
+                            or page_number in task_pages[anchor["source_label"]])]
             embedded_rects = []
-            for item in page.get_images(full=True):
-                xref = item[0]
-                for source_rect in page.get_image_rects(xref):
+            # Один xref может иметь несколько ресурсных имён на странице.
+            # get_image_rects уже перечисляет все его реальные размещения.
+            for item in {item[0]: item for item in page.get_images(full=True)}.values():
+                xref, soft_mask, width, height = item[:4]
+                for source_rect, source_matrix in page.get_image_rects(xref, transform=True):
                     rect = source_rect * page.rotation_matrix
                     if rect.width < 12 or rect.height < 12:
                         continue
@@ -235,17 +300,24 @@ def extract_variant_images(pdf_path, tasks, images_dir, *, positions=None):
                     label = _owner(rect, anchors, tasks, page_number, page.rect.width)
                     if label not in by_label:
                         continue
-                    if xref not in saved:
-                        image = document.extract_image(xref)
-                        name = f"image_{xref}.{image['ext']}"
+                    matrix = source_matrix * page.rotation_matrix
+                    identity = _image_placement_identity(xref, soft_mask, width, height, matrix)
+                    if identity not in saved:
+                        image = (document.extract_image(xref) if identity[1] == "original" else
+                                 _render_image_placement(document, xref, soft_mask, width, height, matrix))
+                        placement_counts[xref] = placement_counts.get(xref, 0) + 1
+                        suffix = "" if placement_counts[xref] == 1 else f"_placement{placement_counts[xref]}"
+                        name = f"image_{xref}{suffix}.{image['ext']}"
                         (images_dir / name).write_bytes(image["image"])
-                        saved[xref] = name
-                    name = saved[xref]
+                        saved[identity] = name
+                    name = saved[identity]
                     if name not in by_label[label]:
                         by_label[label].append(name)
                     embedded_rects.append(rect)
                     manifest.append({"source_label": label, "page_number": page_number,
-                                     "image_name": name, "rect": list(rect), "kind": "embedded"})
+                                     "image_name": name, "rect": list(rect), "kind": "embedded",
+                                     "placement_matrix": list(matrix), "soft_mask": soft_mask,
+                                     "rendered_placement": identity[1] != "original"})
 
             for index, source_rect in enumerate(_vector_rects(page), 1):
                 rect = source_rect * page.rotation_matrix
