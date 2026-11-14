@@ -9,6 +9,7 @@ import pytest
 from openpyxl import load_workbook
 
 import variant_export
+from alexlarin_parser.exporting import service as export_service
 from export_metadata import ABOUT_FIELDS
 from exporter import create_zip
 from variant_export import export_variant, extract_variant_images, normalize_answer
@@ -102,7 +103,7 @@ def test_failed_new_export_preserves_previous_output_and_zip(tmp_path, source, m
     if failure_at == "excel":
         def fail(*args, **kwargs):
             raise OSError("disk write failed")
-        monkeypatch.setattr(variant_export, "write_excel", fail)
+        monkeypatch.setattr(export_service, "write_excel", fail)
     else:
         original_replace = Path.replace
         def fail_pending_archive(self, target):

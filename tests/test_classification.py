@@ -8,15 +8,15 @@ from types import SimpleNamespace
 
 import pytest
 
-import classification
+from alexlarin_parser.classification import catalogues, legacy as classification
 from ai_requests import AIRequestCounter
-from classification import (
+from alexlarin_parser.classification.catalogues import (
     build_category_choices,
-    classify_tasks,
     decode_category_choices,
     load_catalog,
     validate_classification,
 )
+from alexlarin_parser.classification.legacy import classify_tasks
 
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
@@ -135,7 +135,7 @@ def test_children_are_checked_in_complete_catalog_even_with_reduced_candidates(c
     exams, topics = catalogs
     # Ребёнок 180 убран из кандидатов, но остаётся в исходном справочнике.
     # Из-за этого родитель 179 всё равно не превращается в лист.
-    reduced = classification.Catalog(
+    reduced = catalogues.Catalog(
         [row for row in exams if row["id"] != 180], exams.records, exams.root_id,
     )
     assert "E | Вектор" not in build_category_choices(reduced, "E")
@@ -146,7 +146,7 @@ def test_children_are_checked_in_complete_catalog_even_with_reduced_candidates(c
 
 def test_exam_leaf_label_keeps_parent_path_when_candidates_are_already_reduced(catalogs):
     exams, _ = catalogs
-    only_leaf = classification.Catalog(
+    only_leaf = catalogues.Catalog(
         [row for row in exams if row["id"] == 180], exams.records, exams.root_id,
     )
     assert build_category_choices(only_leaf, "E") == {EXAM_LABEL: 180}
@@ -154,7 +154,7 @@ def test_exam_leaf_label_keeps_parent_path_when_candidates_are_already_reduced(c
 
 def test_other_branch_leaf_is_not_allowed_even_when_in_candidate_rows(catalogs, numeric_items):
     exams, topics = catalogs
-    mixed = classification.Catalog(
+    mixed = catalogues.Catalog(
         [*exams, exams.records[34]], exams.records, exams.root_id,
     )
     assert 34 not in build_category_choices(mixed, "E").values()

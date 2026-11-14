@@ -11,6 +11,7 @@ import requests
 import downloader
 import pipeline_io
 import variant_sources
+from alexlarin_parser.sources import parsing as source_parsing, service as source_service
 from variant_sources import (
     VariantContext, discover_catalog, select_variants, parse_variant_html,
     normalize_label, inspect_pdf, task_positions, prepare_sources,
@@ -158,7 +159,7 @@ def test_exam_year_range_uses_end_year_with_unicode_dashes(tmp_path, monkeypatch
             return self
         def __exit__(self, *args):
             return False
-    monkeypatch.setattr(variant_sources.pymupdf, "open", lambda **kwargs: Document())
+    monkeypatch.setattr(source_parsing.pymupdf, "open", lambda **kwargs: Document())
     if last_year == 2013:
         result = inspect_pdf(b"%PDF-test", context)
         assert not any("год" in warning for warning in result["warnings"])
@@ -253,7 +254,7 @@ def test_missing_answer_image_is_warning_and_keeps_conditions(tmp_path, monkeypa
     monkeypatch.setattr(downloader, "download_bytes", download)
     def no_range(context, url):
         raise requests.ConnectionError("нет PNG")
-    monkeypatch.setattr(variant_sources, "download_ranged_source", no_range)
+    monkeypatch.setattr(source_service, "download_ranged_source", no_range)
     result = prepare_sources(context)
     assert result["source_labels"] == ["B1", "B14", "C1", "C6"]
     assert not result["answer_images"]
@@ -309,7 +310,7 @@ def test_ranges_validate_offsets_total_and_count_each_request(tmp_path, monkeypa
     def get(url, headers, timeout):
         start, end = map(int, headers["Range"][6:].split("-"))
         return Response(start, min(end, len(data) - 1))
-    monkeypatch.setattr(variant_sources.requests, "get", get)
+    monkeypatch.setattr(source_service.requests, "get", get)
     assert variant_sources.download_ranged_source(context, "https://example.org/source", chunk_size=8) == data
     assert context.download_count == 3
 
@@ -327,7 +328,7 @@ def test_ranges_reject_invalid_response_without_partial_source(tmp_path, monkeyp
             return self
         def __exit__(self, *args):
             return False
-    monkeypatch.setattr(variant_sources.requests, "get", lambda *args, **kwargs: Response())
+    monkeypatch.setattr(source_service.requests, "get", lambda *args, **kwargs: Response())
     with pytest.raises(ValueError, match="Range"):
         variant_sources.download_ranged_source(context, "https://example.org/source", chunk_size=8)
     assert context.download_count == 1

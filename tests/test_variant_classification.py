@@ -8,8 +8,9 @@ from types import SimpleNamespace
 
 import pytest
 
-import classification
-from classification import classify_variant, load_catalog, normalize_catalog_id
+from alexlarin_parser.classification import service as classification
+from alexlarin_parser.classification.catalogues import load_catalog, normalize_catalog_id
+from alexlarin_parser.classification.service import classify_variant
 
 
 def write_catalog(path, rows, *, exams=False):
