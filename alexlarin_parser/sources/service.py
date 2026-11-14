@@ -27,8 +27,9 @@ LEGACY_URL = "https://alexlarin.net/ege/2026/trvar542.html"
 def atomic_json(path, data):
     """Сохранить JSON общим писателем с прежним переводом строки в конце.
 
-    Имя остаётся доступным из variant_sources для совместимости вызовов
-    и подмен в тестах; сама атомарная запись реализована в pipeline_io.
+    Имя реэкспортируется через variant_sources для прежних вызовов.
+    Подмены в тестах адресуются этому модулю; запись реализована в
+    alexlarin_parser.io.
     """
     _atomic_json(path, data, trailing_newline=True)
 
