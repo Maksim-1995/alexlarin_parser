@@ -16,6 +16,7 @@ import pipeline
 from pipeline import plan_run, run_batch, selected_contexts
 from provider import DeepSeekSettings, PaidCallsBlocked
 from variant_sources import VariantContext
+from alexlarin_parser.io import file_sha256
 
 
 def write_catalogues(base):
@@ -319,3 +320,124 @@ def test_plan_and_resume_selection_need_no_client_or_archive_network(project, mo
     path.write_text(json.dumps({"variants": list(reversed(plan["variants"]))}), encoding="utf8")
     resumed = selected_contexts(base, resume=path)
     assert [c.variant_key for c in resumed] == [c.variant_key for c in reversed(contexts)]
+
+
+def write_category_correction(base, context, *, document=None):
+    """Ручная правка относится к источнику и исходному ответу FakeClient."""
+    path = base / "harness" / "corrections" / f"{context.variant_key}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if document is None:
+        document = {
+            "version": 1, "variant_key": context.variant_key,
+            "source_url": context.source_url, "pdf_sha256": file_sha256(context.pdf_path),
+            "corrections": [{
+                "source_label": "B1", "field": "topics_id", "old": 11, "new": 12,
+                "reason": "Проверенная категория текущего условия",
+                "evidence": ["source PDF, page 1; full topics tree"],
+                "method": "manual-source-and-catalogue-review",
+            }],
+        }
+    path.write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
+    return path, document
+
+
+def forbid_model(client):
+    def unexpected(*args, **kwargs):
+        pytest.fail("Ручные категории должны применяться поверх кэша без новых API-вызовов")
+    client.request_json = unexpected
+    return client
+
+
+def test_manual_category_correction_uses_raw_cache_and_keeps_other_variant(project):
+    base, contexts, _ = project
+    run_batch(base, contexts, client=FakeClient())
+    first, second = contexts
+    original_cache = {p.name: p.read_bytes() for p in first.cache_dir.rglob("*.json")}
+    other_excel = (second.output_dir / "tasks.xlsx").read_bytes()
+    other_zip = second.archive_path.read_bytes()
+    path, document = write_category_correction(base, first)
+
+    report = run_batch(base, [first], client=forbid_model(FakeClient()))
+    state = report["variants"][0]
+    assert report["ocr_calls"] == report["classification_calls"] == 0
+    rows, _ = read_workbook(first)
+    assert rows[1][6] == 12 and rows[2][6] == 11
+    assert state["corrections"] == {
+        "path": str(path), "sha256": file_sha256(path), "records": document["corrections"],
+    }
+    verification = json.loads((Path(state["debug_dir"]) / "verification.json").read_text())
+    assert verification["corrections"] == state["corrections"]
+    assert {p.name: p.read_bytes() for p in first.cache_dir.rglob("*.json")} == original_cache
+    assert (second.output_dir / "tasks.xlsx").read_bytes() == other_excel
+    assert second.archive_path.read_bytes() == other_zip
+
+
+@pytest.mark.parametrize("problem", [
+    "variant", "url", "pdf", "old", "label", "field", "duplicate", "evidence", "method",
+    "parent_topic", "unknown_exam", "placeholder", "existing_topic_name", "invalid_json",
+])
+def test_invalid_manual_correction_preserves_previous_output_and_cache(project, problem):
+    base, contexts, _ = project
+    first = contexts[0]
+    run_batch(base, [first], client=FakeClient())
+    previous_excel = (first.output_dir / "tasks.xlsx").read_bytes()
+    previous_zip = first.archive_path.read_bytes()
+    original_cache = {p.name: p.read_bytes() for p in first.cache_dir.rglob("*.json")}
+    path, document = write_category_correction(base, first)
+    record = document["corrections"][0]
+    if problem == "variant":
+        document["variant_key"] = contexts[1].variant_key
+    elif problem == "url":
+        document["source_url"] = contexts[1].source_url
+    elif problem == "pdf":
+        document["pdf_sha256"] = "0" * 64
+    elif problem == "old":
+        record["old"] = True
+    elif problem == "label":
+        record["source_label"] = "B999"
+    elif problem == "field":
+        record["field"] = "answer"
+    elif problem == "duplicate":
+        document["corrections"].append(dict(record))
+    elif problem == "evidence":
+        record["evidence"] = []
+    elif problem == "method":
+        record["method"] = ""
+    elif problem == "parent_topic":
+        record["new"] = 10
+    elif problem == "unknown_exam":
+        record.update(field="exams_id", new=999)
+    elif problem == "placeholder":
+        record["new"] = "нет подходящей темы"
+    elif problem == "existing_topic_name":
+        record["new"] = "Проценты"
+    path.write_text("{" if problem == "invalid_json" else json.dumps(document), encoding="utf-8")
+
+    report = run_batch(base, [first], client=forbid_model(FakeClient()))
+    state = report["variants"][0]
+    assert report["status"] == "FAILED" and "ValueError" in state["error"]
+    assert state["stage"] == "CLASSIFICATION" and not state["result_current_attempt"]
+    assert (report["ocr_calls"], report["classification_calls"]) == (0, 0)
+    assert (first.output_dir / "tasks.xlsx").read_bytes() == previous_excel
+    assert first.archive_path.read_bytes() == previous_zip
+    assert {p.name: p.read_bytes() for p in first.cache_dir.rglob("*.json")} == original_cache
+
+
+def test_correction_provenance_change_invalidates_content_review_without_paid_calls(project):
+    base, contexts, _ = project
+    first = contexts[0]
+    run_batch(base, [first], client=FakeClient())
+    path, document = write_category_correction(base, first)
+    corrected = run_batch(base, [first], client=forbid_model(FakeClient()))
+    fingerprint = corrected["variants"][0]["review_fingerprint"]
+    (first.debug_dir / "content_review.json").write_text(json.dumps({
+        "fingerprint": fingerprint, "approved": True, "findings": [],
+    }), encoding="utf-8")
+    document["corrections"][0]["reason"] += "; уточнено доказательство"
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+    repeated = run_batch(base, [first], client=forbid_model(FakeClient()))
+    state = repeated["variants"][0]
+    assert state["review_fingerprint"] != fingerprint
+    assert state["content_reviewed"] is False
+    assert repeated["ocr_calls"] == repeated["classification_calls"] == 0

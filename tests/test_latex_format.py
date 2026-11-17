@@ -2,7 +2,24 @@
 
 import unittest
 
+import pytest
+
 from latex_format import normalize_condition
+from task_html import add_subtask_breaks
+
+
+@pytest.mark.parametrize("source,expected", [
+    (r"Призма ABCDEF$A_1B_1C_1D_1E_1F_1$.", r"Призма $ABCDEF$ $A_1B_1C_1D_1E_1F_1$."),
+    (r"Отрезок $A_1$BC.", r"Отрезок $A_1$ $BC$."),
+    (r"Обозначение AB$$x=1$$.", r"Обозначение $AB$ $$x=1$$."),
+    (r"Формула $$x=1$$AB.", r"Формула $$x=1$$ $AB$."),
+])
+def test_auto_wrapped_tokens_next_to_existing_math_keep_valid_delimiters(source, expected):
+    """Геометрические метки C2 не должны создавать ложный разделитель $$ ."""
+    formatted = normalize_condition(source)
+    assert formatted == expected
+    assert add_subtask_breaks(formatted) == expected
+    assert normalize_condition(formatted) == formatted
 
 
 def test_literal_newlines_before_math_do_not_change_cases_rows():

@@ -1,6 +1,7 @@
 # Обработка варианта №13
 
-Статус: в работе. Дата начала: 17.11.2026.
+Статус: исправления и сверка завершены, `SUCCESS`; текущая выдача готова к импорту.
+Дата выполнения: 17.11.2026.
 
 ## Объект и цель
 
@@ -31,8 +32,8 @@
 Не расширять диапазон; не запускать `--fresh-ai`, модельные пинги,
 автоматические повторы или переключения провайдера. `.env`, исходные кэши
 и готовые выдачи других вариантов сохраняются. Commit/push не входят в задачу.
-Отдельный обработчик по номеру 13 не требуется. Код и промпты изменяются
-только при воспроизводимой необходимости, с соответствующей офлайн-проверкой.
+Отдельный обработчик по номеру 13 не требуется. В этом прогоне код и промпты
+сохранены; найденные дефекты записаны для отдельного исправления.
 
 ## План
 
@@ -74,22 +75,119 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m alexlarin_parser --batch 13 --plan
 PYTHONDONTWRITEBYTECODE=1 DEEPSEEK_API_KEY='' GEMINI_API_KEY='' NVIDIA_API_KEY='' .venv/bin/python -m pytest -q -p no:cacheprovider
 ```
 
-Первый прогон с загрузкой недостающих источников и разрешёнными AI-вызовами:
+Первый прогон с загрузкой недостающих источников:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 DEEPSEEK_CLASSIFICATION_THINKING=disabled DEEPSEEK_READ_TIMEOUT=120 .venv/bin/python -u -m alexlarin_parser --url https://alexlarin.net/ege/2013/trvar13.html --max-variants 1
 ```
 
-`--local-only` допустим после подготовки проверенных источников; сам по себе
-он не запрещает модельные обращения. Повтор конвейера пересоздаёт выдачу,
-поэтому проверка сохранности выполняется отдельно, без запуска других вариантов.
+Остановлен агентом через SIGINT до OCR из-за задержек IPv4; код 130,
+32 попытки загрузки, 0 модельных обращений. Отчёт сохранён:
+`reports/20261117T103711Z_fc58557a/manifest.json`.
+
+Источники подготовлены штатным `prepare_sources` в отдельном процессе,
+где только для загрузок выбран доступный IPv6. Локальный вспомогательный
+скрипт и его отчёт находятся в `reports/pilot_13/`, код приложения не менялся:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. .venv/bin/python -u reports/pilot_13/prepare_ipv6_sources.py
+```
+
+Основной прогон по проверенным локальным источникам:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 DEEPSEEK_CLASSIFICATION_THINKING=disabled DEEPSEEK_READ_TIMEOUT=120 .venv/bin/python -u -m alexlarin_parser --url https://alexlarin.net/ege/2013/trvar13.html --max-variants 1 --local-only
+```
+
+Проверка готовых файлов без пересборки и без API:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python reports/pilot_13/check_artifacts.py --run-id 20261117T104453Z_315e1298 --allow-document-change .agents/agents.md --allow-document-change README.md
+git diff --check
+```
+
+`--local-only` сам по себе не запрещает модельные обращения. Повтор конвейера
+пересоздаёт выдачу, поэтому проверка сохранности выполняется отдельно,
+без запуска других вариантов.
 Тайм-аут чтения задаётся для этого запуска через окружение (120 секунд),
 не меняя `.env`, лимит токенов и параметры совместимости модельных кэшей.
 
-## Результаты
+## Результаты первичного прогона (история)
 
 - План: выбран ровно один вариант `ege_2013_trvar13`, платных вызовов 0.
-- Источники, прогоны, проверки и итоговый статус: будут внесены по выполнению.
-- Ожидаемая выдача: `output/ege_2013_trvar13/tasks.xlsx` и рисунки рядом;
-  `archives/ege_2013_trvar13_result.zip`.
-- Доказательства и сводный отчёт: `reports/pilot_13/`.
+- Источники: 3 страницы PDF, 20 задач B1–B14/C1–C6, HTML-ответы B1–B14
+  и PNG ответов C1–C6. SHA-256 и URL сохранены в source manifest.
+- Основной запуск: `20261117T104453Z_315e1298`, код завершения 2,
+  статус `NEEDS_REVIEW`, длительность конвейера 16,255 с.
+- Созданы [Excel](../output/ege_2013_trvar13/tasks.xlsx), 6 файлов рисунков
+  и [ZIP](../archives/ege_2013_trvar13_result.zip) с 7 записями. Все 20 ячеек
+  answer непустые; это перенос публикации, а не проверка решений.
+- Модельные попытки за всю работу: 3 OCR + 1 классификация, без повторов.
+  Usage: 31691 входной + 2322 выходных токена; стоимость неизвестна.
+- Загрузки за всю работу: 32 в прерванной попытке + 38 при подготовке IPv6
+  + 0 в основном локальном прогоне, всего 70 сетевых попыток.
+- Регрессия: `477 passed, 11 subtests passed in 12.00s`.
+- Структурно проверены Excel, категории, source hashes, связь verification
+  с манифестом, ZIP/CRC/байты и счётчики. Сохранность 1149 прежних файлов
+  `input/output/archives` подтверждена по исходному снимку; документы README
+  и `.agents/agents.md` намеренно дополнены результатами этой работы.
+- При визуальной сверке всех 20 условий и опубликованных ответов очевидных
+  математических искажений не обнаружено; проверены все 6 рисунков.
+- Семантическая сверка категорий: 2 `CLEAR_MISMATCH` (B8, C5),
+  3 `DEBATABLE_CATEGORY` (B5, B6, C3), 15 `NO_OBVIOUS_MISMATCH`.
+  Последний статус не означает независимую аттестацию решения.
+- C2: локально воспроизведено предупреждение форматирования при соседних
+  математических блоках; исходная строка сохранена в Excel.
+  Браузерная проверка MathJax в этой попытке не выполнялась.
+- `debug/content_review.json` связан с текущим fingerprint и содержит
+  `approved: false`. Категории, raw API и оплаченные кэши не исправлялись.
+- [Сводный отчёт](../reports/pilot_13/summary.md),
+  [манифест](../reports/20261117T104453Z_315e1298/manifest.json),
+  [проверки артефактов](../reports/pilot_13/artifact_check.json),
+  [сверка категорий](../reports/pilot_13/classification_review.json).
+
+## Исправления по отдельному поручению пользователя
+
+Пользователь разрешил пять исправлений после первичного прогона. Эта стадия
+выполнена без новых AI-вызовов и загрузок, только на готовых кэшах.
+
+1. C2: исправлена нормализация границы между новым математическим обозначением
+   и существующей формулой, добавлены четыре регрессионных случая и идемпотентность.
+2. B8/C5: неверные темы заменены на проверенные содержательные названия.
+3. B5/B6/C3: спорные темы пересмотрены; C3 также получил exams237 смешанного типа.
+   Причины отсутствия подходящих листьев и полные решения о категориях сохранены
+   в [отчёте](../reports/quality_13/category_review.json). CSV не менялись.
+4. Добавлен минимальный слой ручных категорий в `alexlarin_parser/corrections.py`.
+   [Шесть записей](corrections/ege_2013_trvar13.json) привязаны к источнику,
+   PDF SHA-256 и прежним значениям; ошибки блокируют экспорт. Provenance сохранён
+   в manifest/verification, хеш коррекций входит в fingerprint сверки.
+5. Выдача пересобрана, проверены Excel/ZIP, все 20 условий/ответов и 6 рисунков.
+   Firefox/MathJax отрисовал 20 карточек и 70 math-блоков без ошибок. В preview
+   дополнительно сохранены две строки ответа C6; данные answer в Excel не менялись.
+
+Команды исправительного этапа:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 DEEPSEEK_API_KEY='' GEMINI_API_KEY='' NVIDIA_API_KEY='' .venv/bin/python -m pytest -q -p no:cacheprovider
+PYTHONDONTWRITEBYTECODE=1 DEEPSEEK_API_KEY='' GEMINI_API_KEY='' NVIDIA_API_KEY='' DEEPSEEK_CLASSIFICATION_THINKING=disabled .venv/bin/python -u -m alexlarin_parser --url https://alexlarin.net/ege/2013/trvar13.html --max-variants 1 --local-only
+PYTHONDONTWRITEBYTECODE=1 DEEPSEEK_API_KEY='' GEMINI_API_KEY='' NVIDIA_API_KEY='' .venv/bin/python -u reports/quality_13/check_preview.py
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python reports/quality_13/check_artifacts.py --run-id 20261117T161316Z_79f99cd9
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m compileall -q alexlarin_parser main.py legacy_sources.py recognizer.py parsers.py refine_conditions.py
+git diff --check
+```
+
+Полная регрессия: 497 passed, 11 subtests passed. Исходный OCR, ответы,
+классификационный кэш и прежние отчёты не менялись. Предыдущий Excel/ZIP №13
+сохранены в штатном backup; прочие варианты не пересобирались.
+
+Первый исправительный прогон `20261117T160829Z_7bf181ec` завершился
+NEEDS_REVIEW до новой сверки; после фактической проверки текущий fingerprint
+одобрен. Финальный прогон `20261117T161316Z_79f99cd9` завершился с кодом 0,
+SUCCESS, без warnings и пропусков. Оба прогона: 0 OCR + 0 классификаций + 0 загрузок.
+
+Финальные [Excel](../output/ege_2013_trvar13/tasks.xlsx),
+[ZIP](../archives/ege_2013_trvar13_result.zip),
+[манифест](../reports/20261117T161316Z_79f99cd9/manifest.json),
+[отчёт исправлений](../reports/quality_13/summary.md).
+Готовность означает соответствие публикации и контракту импорта;
+задачи не решались для генерации или восстановления ответов.

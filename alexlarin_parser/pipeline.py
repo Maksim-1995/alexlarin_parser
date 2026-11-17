@@ -13,6 +13,7 @@ import uuid
 
 from .classification.catalogues import load_catalog
 from .classification.service import classification_review_warnings, classify_variant
+from .corrections import apply_category_corrections
 from .io import atomic_json, file_sha256, fingerprint, json_value, read_json
 from .provider import DeepSeekClient, DeepSeekSettings, PaidCallsBlocked, usage_summary
 from .exporting.service import export_variant
@@ -164,7 +165,7 @@ def _recognize_tasks(context, sources, state, client, *, cache_dir, fresh_ai):
     return tasks
 
 
-def _classify_tasks(base_dir, context, tasks, state, client, *, cache_dir):
+def _classify_tasks(base_dir, context, tasks, state, client, *, cache_dir, pdf_path):
     """Назначить проверенные ID и отдельно отметить спорное содержание тем."""
     exams_path = base_dir / "data" / "exams.csv"
     topics_path = base_dir / "data" / "topics.csv"
@@ -172,6 +173,11 @@ def _classify_tasks(base_dir, context, tasks, state, client, *, cache_dir):
                                   topics_path=topics_path, cache_dir=cache_dir)
     for task in tasks:
         task.update(classified[task["task_num"]])
+    corrections = apply_category_corrections(
+        context, tasks, pdf_path=pdf_path, exams_path=exams_path, topics_path=topics_path,
+    )
+    if corrections:
+        state["corrections"] = corrections
     state["warnings"].extend(classification_review_warnings(
         tasks, exams_path=exams_path, topics_path=topics_path,
     ))
@@ -183,7 +189,7 @@ def _apply_content_review(context, sources, tasks, result, state):
     Структурный успех экспорта не подтверждает правильность формул. Старое
     approved не переносится на изменённые условия, рисунки или форматтеры.
     """
-    state["review_fingerprint"] = fingerprint({
+    review_identity = {
         "variant_key": context.variant_key, "pdf_sha256": file_sha256(sources["pdf_path"]),
         "tasks": tasks, "metadata": sources["metadata"],
         "image_hashes": {Path(p).name: file_sha256(p) for p in result["image_files"]},
@@ -193,7 +199,10 @@ def _apply_content_review(context, sources, tasks, result, state):
              "exporting/archive.py", "exporting/metadata.py", "formatting/latex.py",
              "formatting/math_text.py", "formatting/html.py")
         },
-    })
+    }
+    if state.get("corrections"):
+        review_identity["corrections_sha256"] = state["corrections"]["sha256"]
+    state["review_fingerprint"] = fingerprint(review_identity)
     review = read_json(context.debug_dir / "content_review.json")
     matching = isinstance(review, dict) and review.get("fingerprint") == state["review_fingerprint"]
     if matching:
@@ -215,6 +224,7 @@ def _write_verification(context, sources, tasks, state):
         "tasks": tasks, "missing_answers": state["missing_answers"],
         "warnings": state["warnings"], "review_fingerprint": state["review_fingerprint"],
         "result": state["result"], "status": state["status"],
+        "corrections": state.get("corrections"),
     })
 
 
@@ -232,7 +242,8 @@ def _execute_variant(base_dir, context, state, client, *, run_debug, cache_dir,
         tasks = _recognize_tasks(attempt_context, sources, state, client,
                                  cache_dir=cache_dir, fresh_ai=fresh_ai)
     with _stage(state, "CLASSIFICATION", save):
-        _classify_tasks(base_dir, attempt_context, tasks, state, client, cache_dir=cache_dir)
+        _classify_tasks(base_dir, attempt_context, tasks, state, client,
+                        cache_dir=cache_dir, pdf_path=sources["pdf_path"])
     with _stage(state, "EXPORT", save):
         result = export_variant(attempt_context, tasks, sources["metadata"], pdf_path=sources["pdf_path"])
         state["warnings"].extend(result.get("warnings", []))

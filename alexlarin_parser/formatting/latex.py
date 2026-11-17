@@ -58,6 +58,12 @@ def normalize_condition(condition):
         text = TOKEN_RE.sub(_wrap_token, text)
         text = re.sub(r"[ \t\u00a0]+", " ", text)
         text = re.sub(r"[ \t]+([.,;:!?])", r"\1", text)
+        # Новая обёртка рядом с готовой формулой не должна создавать $$.
+        # Разделяем только границы частей; содержимое math и display $$ не меняем.
+        if index and text.startswith("$"):
+            text = " " + text
+        if index + 1 < len(parts) and re.search(r"(?<!\\)\$$", text):
+            text += " "
         parts[index] = text
 
     return "".join(parts).strip()
