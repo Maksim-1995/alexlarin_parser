@@ -13,7 +13,7 @@ import uuid
 
 from .classification.catalogues import load_catalog
 from .classification.service import classification_review_warnings, classify_variant
-from .corrections import apply_category_corrections
+from .corrections import apply_task_corrections
 from .io import atomic_json, file_sha256, fingerprint, json_value, read_json
 from .provider import DeepSeekClient, DeepSeekSettings, PaidCallsBlocked, usage_summary
 from .exporting.service import export_variant
@@ -173,7 +173,7 @@ def _classify_tasks(base_dir, context, tasks, state, client, *, cache_dir, pdf_p
                                   topics_path=topics_path, cache_dir=cache_dir)
     for task in tasks:
         task.update(classified[task["task_num"]])
-    corrections = apply_category_corrections(
+    corrections = apply_task_corrections(
         context, tasks, pdf_path=pdf_path, exams_path=exams_path, topics_path=topics_path,
     )
     if corrections:

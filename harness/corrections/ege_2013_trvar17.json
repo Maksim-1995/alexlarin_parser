@@ -1,0 +1,64 @@
+{
+  "version": 2,
+  "variant_key": "ege_2013_trvar17",
+  "source_url": "https://alexlarin.net/ege/2013/trvar17.html",
+  "pdf_sha256": "9fcc349d770b27ccac395ed6dd7920539d5cd0a6ea67dd880094781711146ba1",
+  "corrections": [
+    {
+      "source_label": "B11",
+      "field": "topics_id",
+      "old": 618,
+      "new": "Соотношение объёмов цилиндра и вписанного шара",
+      "reason": "Ищется объём шара по объёму описанного цилиндра. Лист618 о сфере и её положении относительно плоскости не отражает связь объёмов, точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar17.pdf#page=3",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "B12",
+      "field": "topics_id",
+      "old": 257,
+      "new": 437,
+      "reason": "Требование силы не менее порога приводит к простейшему тригонометрическому неравенству. Существующий лист437 соответствует, лист257 относится к уравнениям.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar17.pdf#page=3",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 451,
+      "new": "Системы логарифмических и показательных неравенств с модулем",
+      "reason": "Система сочетает произведение логарифмов и степени модуля с переменным показателем. Лист451 только о модулях не охватывает обе строки; подходящего смешанного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar17.pdf#page=3",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "C5",
+      "field": "topics_id",
+      "old": 266,
+      "new": 443,
+      "reason": "Дано иррациональное неравенство с параметром, верное на отрезке. Существующий лист443 сложных иррациональных неравенств охватывает математический объект; exams254 уточняет параметр. Тригонометрии нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar17.pdf#page=3",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    }
+  ]
+}

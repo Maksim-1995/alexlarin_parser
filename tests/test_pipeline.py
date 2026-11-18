@@ -441,3 +441,60 @@ def test_correction_provenance_change_invalidates_content_review_without_paid_ca
     assert state["review_fingerprint"] != fingerprint
     assert state["content_reviewed"] is False
     assert repeated["ocr_calls"] == repeated["classification_calls"] == 0
+
+
+def test_condition_corrections_preserve_paid_cache_and_other_variant(project):
+    base, contexts, _ = project
+    run_batch(base, contexts, client=FakeClient())
+    first, second = contexts
+    cached = {str(p.relative_to(first.cache_dir)): p.read_bytes()
+              for p in first.cache_dir.rglob('*.json')}
+    other_excel = (second.output_dir / 'tasks.xlsx').read_bytes()
+    other_zip = second.archive_path.read_bytes()
+    initial = json.loads((first.cache_dir / 'conditions.json').read_text())['tasks'][0]['condition']
+    path, document = write_category_correction(base, first)
+    document['version'] = 2
+    document['corrections'].append({
+        'source_label': 'B1', 'field': 'condition', 'old': initial,
+        'new': initial.replace('$x^2$', r'$\sqrt{x}-1$'),
+        'reason': 'Корень по исходному PDF', 'evidence': ['source PDF page 1'],
+        'method': 'manual-source-review',
+    })
+    path.write_text(json.dumps(document), encoding='utf-8')
+    report = run_batch(base, [first], client=forbid_model(FakeClient()))
+    state = report['variants'][0]
+    assert (report['ocr_calls'], report['classification_calls']) == (0, 0)
+    rows, _ = read_workbook(first)
+    assert r'\sqrt{x}-1' in rows[1][1] and rows[1][6] == 12
+    assert {str(p.relative_to(first.cache_dir)): p.read_bytes()
+            for p in first.cache_dir.rglob('*.json')} == cached
+    assert (second.output_dir / 'tasks.xlsx').read_bytes() == other_excel
+    assert second.archive_path.read_bytes() == other_zip
+    assert state['corrections']['records'] == document['corrections']
+    assert not state['content_reviewed']
+
+
+@pytest.mark.parametrize('problem', ['old', 'empty', 'non_string', 'version_one', 'answer'])
+def test_invalid_condition_corrections_are_atomic(project, problem):
+    from alexlarin_parser.corrections import apply_category_corrections
+    base, contexts, _ = project
+    context = contexts[0]
+    tasks = [{'task_num': 1, 'source_label': 'B1', 'condition': r'$\sqrt{x}-1$',
+              'exams_id': 11, 'topics_id': 11}]
+    original = copy.deepcopy(tasks)
+    path, document = write_category_correction(base, context)
+    document['version'] = 2
+    record = dict(source_label='B1', field='condition', old=tasks[0]['condition'],
+                  new=r'$\sqrt{x-1}$', reason='Source verified',
+                  evidence=['PDF page 1'], method='manual-source-review')
+    document['corrections'].append(record)
+    if problem == 'old': record['old'] += ' stale'
+    elif problem == 'empty': record['new'] = '  '
+    elif problem == 'non_string': record['new'] = 7
+    elif problem == 'version_one': document['version'] = 1
+    elif problem == 'answer': record['field'] = 'answer'
+    path.write_text(json.dumps(document), encoding='utf-8')
+    with pytest.raises(ValueError):
+        apply_category_corrections(context, tasks, pdf_path=context.pdf_path,
+                                   exams_path=base/'data/exams.csv', topics_path=base/'data/topics.csv')
+    assert tasks == original

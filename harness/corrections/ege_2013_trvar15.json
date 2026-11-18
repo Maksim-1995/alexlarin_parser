@@ -1,0 +1,105 @@
+{
+  "version": 2,
+  "variant_key": "ege_2013_trvar15",
+  "source_url": "https://alexlarin.net/ege/2013/trvar15.html",
+  "pdf_sha256": "be0aa118851a078b553e8694b540f75c5d337db8133329767f66a3742c4befce",
+  "corrections": [
+    {
+      "source_label": "B4",
+      "field": "topics_id",
+      "old": 12,
+      "new": "Сравнение времени движения по разным маршрутам",
+      "reason": "Сравниваются времена движения по независимым маршрутам; нет сближения, удаления, средней скорости всего пути или погони. Точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar15.pdf#page=2",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "B6",
+      "field": "topics_id",
+      "old": 181,
+      "new": "Радиус вписанной окружности треугольника",
+      "reason": "Ищется радиус вписанной окружности треугольника по сетке; общие определения круга и лист Птолемея не соответствуют. Точного листа радиуса нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar15.pdf#page=2",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "B11",
+      "field": "exams_id",
+      "old": 189,
+      "new": 188,
+      "reason": "Используется комбинация цилиндра и описанного параллелепипеда для нахождения высоты. exams188 охватывает сочетание тел; topics583 только объём параллелепипеда, точного листа комбинации нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar15.pdf#page=3",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "B11",
+      "field": "topics_id",
+      "old": 583,
+      "new": "Цилиндр, вписанный в прямоугольный параллелепипед",
+      "reason": "Используется комбинация цилиндра и описанного параллелепипеда для нахождения высоты. exams188 охватывает сочетание тел; topics583 только объём параллелепипеда, точного листа комбинации нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar15.pdf#page=3",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "C2",
+      "field": "exams_id",
+      "old": 216,
+      "new": 215,
+      "reason": "Двугранный угол задан диагональю и вершинами куба; его грани не являются гранями куба. exams215 охватывает произвольные плоскости, topics591 Двугранный угол сохранён.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar15.pdf#page=3",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 432,
+      "new": "Системы показательных, логарифмических и иррациональных неравенств",
+      "reason": "По исправленному источнику в системе логарифм, показательная функция и корень. Отдельные листья систем не охватывают все типы.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar15.pdf#page=3",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "C3",
+      "field": "condition",
+      "old": "Решите систему неравенств\n$\\begin{cases}\\log_{\\frac{1}{x}}\\left(\\frac{5}{2}x-1\\right)\\ge -2\\\\\\frac{(4^x-12\\cdot 2^x+32)(x-1)}{\\sqrt{x-1}}\\ge 0\\end{cases}$",
+      "new": "Решите систему неравенств\n$\\begin{cases}\\log_{\\frac{1}{x}}\\left(\\frac{5}{2}x-1\\right)\\ge -2\\\\\\frac{(4^x-12\\cdot 2^x+32)(x-1)}{\\sqrt{x}-1}\\ge 0\\end{cases}$",
+      "reason": "Посимвольная сверка с исходным PDF; исправление подтверждённого OCR/типографического искажения без изменения ответа.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar15.pdf#page=3",
+        "reports/pilot_14_17/evidence/v15_page3.png",
+        "reports/pilot_14_17/content_review.json"
+      ],
+      "method": "manual-pdf-visual-review, 2026-11-18"
+    }
+  ]
+}

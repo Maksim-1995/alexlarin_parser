@@ -1,0 +1,118 @@
+{
+  "version": 2,
+  "variant_key": "ege_2013_trvar14",
+  "source_url": "https://alexlarin.net/ege/2013/trvar14.html",
+  "pdf_sha256": "79cc594dfc6d7d67e86b7cb1a9b801bbc7b86b63e441fe3a159a79d704932008",
+  "corrections": [
+    {
+      "source_label": "B2",
+      "field": "topics_id",
+      "old": 38,
+      "new": "Чтение графиков и диаграмм",
+      "reason": "Чтение минимума на диаграмме; среднее арифметическое не вычисляется. Подходящего листа чтения графиков в topics нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar14.pdf#page=1",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "C2",
+      "field": "exams_id",
+      "old": 218,
+      "new": 181,
+      "reason": "Перпендикуляры к A1C из середин AB и AD встречаются в одной точке диагонали по симметрии куба. Листа угла между пересекающимися прямыми в exams нет: выбран точный объект Куб (181); новый topics описывает искомый угол без ложной скрещиваемости.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar14.pdf#page=3",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "C2",
+      "field": "topics_id",
+      "old": 565,
+      "new": "Угол между пересекающимися прямыми в пространстве",
+      "reason": "Перпендикуляры к A1C из середин AB и AD встречаются в одной точке диагонали по симметрии куба. Листа угла между пересекающимися прямыми в exams нет: выбран точный объект Куб (181); новый topics описывает искомый угол без ложной скрещиваемости.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar14.pdf#page=3",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 444,
+      "new": "Системы логарифмических и иррациональных неравенств",
+      "reason": "Система сочетает логарифм и радикалы. Листья 430/432 и 444 охватывают только один тип; нового смешанного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar14.pdf#page=3",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "C5",
+      "field": "topics_id",
+      "old": 274,
+      "new": 440,
+      "reason": "Уравнение содержит два радикала и параметр без тригонометрии. Существующий лист 440 иррациональных уравнений охватывает объект; exams253 уже уточняет параметр.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar14.pdf#page=3",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "C6",
+      "field": "topics_id",
+      "old": 638,
+      "new": 7,
+      "reason": "Перестановка цифр десятичной записи прямо соответствует листу 7 Десятичные дроби; деление с остатком условием не требуется.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar14.pdf#page=3",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "B7",
+      "field": "condition",
+      "old": "Найдите значение выражения $\\frac{24(\\sin^2 17^0 - \\cos^2 17^0)}{\\cos 34^0}$.",
+      "new": "Найдите значение выражения $\\frac{24(\\sin^2 17^\\circ - \\cos^2 17^\\circ)}{\\cos 34^\\circ}$.",
+      "reason": "Посимвольная сверка с исходным PDF; исправление подтверждённого OCR/типографического искажения без изменения ответа.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar14.pdf#page=2",
+        "reports/pilot_14_17/evidence/v14_page2.png",
+        "reports/pilot_14_17/content_review.json"
+      ],
+      "method": "manual-pdf-visual-review, 2026-11-18"
+    },
+    {
+      "source_label": "C6",
+      "field": "condition",
+      "old": "В десятичной записи положительного числа поменяли местами цифры, стоящие на первом и третьем местах после запятой. При этом число увеличилось в 13 раз.\n\nа) Какая цифра стояла на третьем месте после запятой в исходном числе?\n\nб) Какое число получилось?.",
+      "new": "В десятичной записи положительного числа поменяли местами цифры, стоящие на первом и третьем местах после запятой. При этом число увеличилось в 13 раз.\n\nа) Какая цифра стояла на третьем месте после запятой в исходном числе?\n\nб) Какое число получилось?",
+      "reason": "Посимвольная сверка с исходным PDF; исправление подтверждённого OCR/типографического искажения без изменения ответа.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar14.pdf#page=3",
+        "reports/pilot_14_17/evidence/v14_page3.png",
+        "reports/pilot_14_17/content_review.json"
+      ],
+      "method": "manual-pdf-visual-review, 2026-11-18"
+    }
+  ]
+}

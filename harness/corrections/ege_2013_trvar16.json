@@ -1,0 +1,118 @@
+{
+  "version": 2,
+  "variant_key": "ege_2013_trvar16",
+  "source_url": "https://alexlarin.net/ege/2013/trvar16.html",
+  "pdf_sha256": "cf1efbbcb2ad298568a933f6e42d378d0927809dfbace1ad2449ab36339cef87",
+  "corrections": [
+    {
+      "source_label": "B2",
+      "field": "topics_id",
+      "old": 5,
+      "new": "Чтение графиков и диаграмм",
+      "reason": "Значения сопротивления читаются по графику тока; арифметический лист натуральных чисел не описывает навык и дробные значения.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar16.pdf#page=1",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "B6",
+      "field": "topics_id",
+      "old": 513,
+      "new": "Радиус вписанной окружности треугольника",
+      "reason": "Площадь является возможным методом, но требуется радиус вписанной окружности. Точного листа радиуса в полном справочнике нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar16.pdf#page=2",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "B7",
+      "field": "topics_id",
+      "old": 121,
+      "new": "Преобразование степеней с иррациональными показателями",
+      "reason": "Показатели иррациональные; лист 121 находится в ветке степени с натуральным показателем, лист82 ограничен дробными показателями. Подходящего листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar16.pdf#page=2",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "B11",
+      "field": "topics_id",
+      "old": 616,
+      "new": "Соотношение объёмов цилиндра и вписанного шара",
+      "reason": "Дана комбинация цилиндра и шара и связь объёмов; цилиндр не многогранник. Лист618 слишком общий и относится также к сечению плоскостью; точного листа объёмов этой комбинации нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar16.pdf#page=2",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 432,
+      "new": "Системы показательных и логарифмических неравенств",
+      "reason": "После восстановления дробей первая строка показательная, вторая логарифмическая. Лист432 только про логарифмы; 427 только про показатели. exams233 уже корректен.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar16.pdf#page=3",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "C6",
+      "field": "topics_id",
+      "old": 637,
+      "new": "Принцип Дирихле и оценки сумм",
+      "reason": "Доказательство повторяемости разностей через ограничение минимальной суммы — принцип Дирихле/оценки, не делимость. Подходящего листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar16.pdf#page=3",
+        "data/exams.csv; data/topics.csv — полные деревья",
+        "reports/pilot_14_17/classification_review.json",
+        "reports/quality_14_17/category_review.json"
+      ],
+      "method": "source-and-full-catalogue-review, 2026-11-18"
+    },
+    {
+      "source_label": "C1",
+      "field": "condition",
+      "old": "Дано уравнение $\\sqrt{3-\\cos 2x}-\\sin 2x=-2\\sqrt{2}\\sin x$. a) Решите уравнение б) Найдите все корни на промежутке $\\left[-2\\pi;-\\pi\\right]$",
+      "new": "Дано уравнение $\\sqrt{3-\\cos 2x-\\sin 2x}=-2\\sqrt{2}\\sin x$. a) Решите уравнение б) Найдите все корни на промежутке $\\left[-2\\pi;-\\pi\\right]$",
+      "reason": "Посимвольная сверка с исходным PDF; исправление подтверждённого OCR/типографического искажения без изменения ответа.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar16.pdf#page=3",
+        "reports/pilot_14_17/evidence/v16_page3.png",
+        "reports/pilot_14_17/content_review.json"
+      ],
+      "method": "manual-pdf-visual-review, 2026-11-18"
+    },
+    {
+      "source_label": "C3",
+      "field": "condition",
+      "old": "Решите систему неравенств: $\\begin{cases} 4^{x^2+x+1}+3\\cdot 6^{x^2+x+1}\\ge 4\\cdot 9^{x^2+x+1} \\\\ \\log_{\\frac{1}{3}}\\left|x-2\\right|-\\log_{2-x}3\\le 2 \\end{cases}$",
+      "new": "Решите систему неравенств: $\\begin{cases} 4^{\\frac{x^2-2}{x^2+x+1}}+3\\cdot 6^{\\frac{x^2-2}{x^2+x+1}}\\ge 4\\cdot 9^{\\frac{x^2-2}{x^2+x+1}} \\\\ \\log_{\\frac{1}{3}}\\left|x-2\\right|-\\log_{2-x}3\\le 2 \\end{cases}$",
+      "reason": "Посимвольная сверка с исходным PDF; исправление подтверждённого OCR/типографического искажения без изменения ответа.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar16.pdf#page=3",
+        "reports/pilot_14_17/evidence/v16_page3.png",
+        "reports/pilot_14_17/content_review.json"
+      ],
+      "method": "manual-pdf-visual-review, 2026-11-18"
+    }
+  ]
+}

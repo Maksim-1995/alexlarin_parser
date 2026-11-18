@@ -1,4 +1,4 @@
-"""Проверенные ручные категории поверх исходного AI-кэша одного варианта."""
+"""Проверенные ручные категории и условия поверх исходных AI-кэшей варианта."""
 
 import json
 from pathlib import Path
@@ -12,13 +12,18 @@ RECORD_FIELDS = {"source_label", "field", "old", "new", "reason", "evidence", "m
 CATEGORY_FIELDS = {"exams_id", "topics_id"}
 
 
-def apply_category_corrections(context, tasks, *, pdf_path, exams_path, topics_path):
+def apply_task_corrections(context, tasks, *, pdf_path, exams_path, topics_path):
     """Проверить все правки, затем применить их к задачам, не записывая AI-кэш.
 
     Отсутствие файла сохраняет обычный поток. Неверная identity, устаревшее
     old, повторная/неизвестная метка или недопустимая категория вызывают
     ValueError до изменения задач. Возвращается provenance для отчёта и сверки.
     Семантическое основание каждой правки указывает автор JSON, не валидатор.
+
+    Версия 1 поддерживает только категории; версия 2 дополнительно разрешает
+    непустой текст condition. Правки применяются после чтения классификации
+    исходного OCR: новую платную классификацию они не запускают. Категории
+    исправленного условия проверяет автор коррекций при содержательной сверке.
     """
     path = Path(context.base_dir) / "harness" / "corrections" / f"{context.variant_key}.json"
     if not path.exists():
@@ -29,7 +34,7 @@ def apply_category_corrections(context, tasks, *, pdf_path, exams_path, topics_p
         raise ValueError("Коррекции: файл должен содержать UTF-8 JSON") from error
     if not isinstance(document, dict) or set(document) != DOCUMENT_FIELDS:
         raise ValueError("Коррекции: неверные поля документа")
-    if type(document["version"]) is not int or document["version"] != 1:
+    if type(document["version"]) is not int or document["version"] not in (1, 2):
         raise ValueError("Коррекции: неподдерживаемая версия")
     if (document["variant_key"] != context.variant_key
             or document["source_url"] != context.source_url
@@ -42,14 +47,15 @@ def apply_category_corrections(context, tasks, *, pdf_path, exams_path, topics_p
     if len(prepared) != len(tasks):
         raise ValueError("Коррекции: исходные метки задач повторяются")
     seen = set()
+    allowed_fields = CATEGORY_FIELDS | ({"condition"} if document["version"] == 2 else set())
     for record in records:
         if not isinstance(record, dict) or set(record) != RECORD_FIELDS:
             raise ValueError("Коррекции: неверные поля записи")
         label, field = record["source_label"], record["field"]
         if not isinstance(label, str) or label not in prepared:
             raise ValueError("Коррекции: неизвестная исходная метка")
-        if not isinstance(field, str) or field not in CATEGORY_FIELDS:
-            raise ValueError("Коррекции: разрешены только exams_id и topics_id")
+        if not isinstance(field, str) or field not in allowed_fields:
+            raise ValueError("Коррекции: недопустимое поле для этой версии документа")
         if (label, field) in seen:
             raise ValueError("Коррекции: повторная правка одного поля задачи")
         seen.add((label, field))
@@ -63,6 +69,8 @@ def apply_category_corrections(context, tasks, *, pdf_path, exams_path, topics_p
         current = prepared[label][field]
         if type(current) is not type(record["old"]) or current != record["old"]:
             raise ValueError(f"Коррекции: прежнее значение {label}.{field} изменилось")
+        if field == "condition" and (not isinstance(record["new"], str) or not record["new"].strip()):
+            raise ValueError("Коррекции: условие должно быть непустой строкой")
         prepared[label][field] = record["new"]
 
     exams = load_catalog(exams_path, name_column="name_of_Exam",
@@ -80,5 +88,10 @@ def apply_category_corrections(context, tasks, *, pdf_path, exams_path, topics_p
                 raise ValueError("Коррекции: укажите существующий ID или точное новое название")
     # Применяем только после проверки всех записей и полного набора категорий.
     for task in tasks:
-        task.update({field: prepared[task["source_label"]][field] for field in CATEGORY_FIELDS})
+        task.update({field: prepared[task["source_label"]][field]
+                     for field in allowed_fields if field in prepared[task["source_label"]]})
     return {"path": str(path), "sha256": file_sha256(path), "records": records}
+
+
+# Совместимость существующих импортов и файлов категории версии 1.
+apply_category_corrections = apply_task_corrections
