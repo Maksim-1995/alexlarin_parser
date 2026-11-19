@@ -8,6 +8,7 @@ CLI выбирает контексты, а этот модуль управля
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 import time
 import uuid
 
@@ -142,7 +143,8 @@ def _recognize_tasks(context, sources, state, client, *, cache_dir, fresh_ai):
     recognized = recognize_variant(context, sources, client, cache_dir=cache_dir,
                                    allow_legacy=not fresh_ai)
     state["ocr_provenance"] = recognized.get("provenance")
-    state["warnings"].extend(recognized.get("warnings", []))
+    state["ocr_warnings"] = list(recognized.get("warnings", []))
+    state["warnings"].extend(state["ocr_warnings"])
     tasks = recognized["tasks"]
     state["task_count"] = len(tasks)
     answers = dict(sources.get("html_answers", {}))
@@ -212,6 +214,29 @@ def _apply_content_review(context, sources, tasks, result, state):
         if isinstance(findings, list) and all(isinstance(f, str) for f in findings):
             state["warnings"].extend(findings)
     state["content_reviewed"] = bool(matching and review.get("approved") is True)
+    state["resolved_warnings"] = []
+    if state["content_reviewed"]:
+        resolutions = review.get("resolved_warnings", [])
+        valid = isinstance(resolutions, list)
+        seen = set()
+        for item in resolutions if valid else []:
+            if (not isinstance(item, dict) or set(item) != {"warning", "reason", "evidence"}
+                    or not isinstance(item["warning"], str)
+                    or not re.fullmatch(r"Страница [1-9]\d*: .+", item["warning"])
+                    or item["warning"] not in state.get("ocr_warnings", [])
+                    or item["warning"] not in state["warnings"] or item["warning"] in seen
+                    or not isinstance(item["reason"], str) or not item["reason"].strip()
+                    or not isinstance(item["evidence"], list) or not item["evidence"]
+                    or any(not isinstance(e, str) or not e.strip() for e in item["evidence"])):
+                valid = False
+                break
+            seen.add(item["warning"])
+        if valid:
+            state["resolved_warnings"] = resolutions
+            state["warnings"] = [w for w in state["warnings"] if w not in seen]
+        else:
+            state["content_reviewed"] = False
+            state["warnings"].append("Некорректное подтверждение устранения замечаний OCR")
     if not state["content_reviewed"]:
         state["warnings"].append("Требуется содержательная сверка формул, ответов, рисунков и тем по источникам")
     state["status"] = "NEEDS_REVIEW" if state["warnings"] or state["missing_answers"] else "SUCCESS"
@@ -227,6 +252,8 @@ def _write_verification(context, sources, tasks, state):
         "warnings": state["warnings"], "review_fingerprint": state["review_fingerprint"],
         "result": state["result"], "status": state["status"],
         "corrections": state.get("corrections"),
+        "resolved_warnings": state.get("resolved_warnings", []),
+        "ocr_warnings": state.get("ocr_warnings", []),
     })
 
 

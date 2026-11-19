@@ -1,0 +1,137 @@
+{
+  "version": 3,
+  "variant_key": "ege_2013_trvar22",
+  "source_url": "https://alexlarin.net/ege/2013/trvar22.html",
+  "pdf_sha256": "0928671cfb7fb8b9c886b480c6212e08c1d8663406f46b93bb3354c3209837cf",
+  "corrections": [
+    {
+      "source_label": "B8",
+      "field": "condition",
+      "old": "На рисунке изображён график функции $y = F(x)$ и одной из первообразных некоторой функции $f(x)$, определённой на интервале $(-2;6)$. Пользуясь рисунком, определите количество решений уравнения $f(x) = 0$ на отрезке $[-1;5]$.",
+      "new": "На рисунке изображён график функции $y = F(x)$ — одной из первообразных некоторой функции $f(x)$, определённой на интервале $(-2;6)$. Пользуясь рисунком, определите количество решений уравнения $f(x) = 0$ на отрезке $[-1;5]$.",
+      "reason": "Источник описывает F как одну первообразную f; лишний союз OCR искажает связь функций.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar22.pdf",
+        "reports/pilot_21_25/evidence/v22_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C3",
+      "field": "condition",
+      "old": "Решите систему неравенств:\\n$\\begin{cases}5^x-3^{x+1}>2\\cdot\\left(5^{x-1}-3^{x-2}\\right)\\\\\\frac{2}{\\log_2 x}-1>-3\\end{cases}$",
+      "new": "Решите систему неравенств:\\n$\\begin{cases}5^x-3^{x+1}>2\\cdot\\left(5^{x-1}-3^{x-2}\\right)\\\\\\frac{2}{\\frac{2}{\\log_2 x}-1}>-3\\end{cases}$",
+      "reason": "Восстановлена внешняя дробь 2/(2/log₂x−1) во второй строке по увеличенному PDF.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar22.pdf",
+        "reports/pilot_21_25/evidence/v22_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B1",
+      "field": "topics_id",
+      "old": 19,
+      "new": 7,
+      "reason": "Перевод футов/дюймов использует десятичные дроби 0,305 и 2,54; лист натуральных чисел 19 не соответствует данным.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar22.pdf",
+        "reports/pilot_21_25/evidence/v22_page1.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B6",
+      "field": "topics_id",
+      "old": 528,
+      "new": "Радиус описанной окружности правильного треугольника",
+      "reason": "Лист 528 относится к длине окружности/площади круга; требуется радиус по сетке. Точного листа этого радиуса нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar22.pdf",
+        "reports/pilot_21_25/evidence/v22_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B7",
+      "field": "topics_id",
+      "old": 121,
+      "new": "Преобразование степеней с иррациональными показателями",
+      "reason": "Лист 121 ограничен натуральными показателями; здесь √3 и √3−1. Точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar22.pdf",
+        "reports/pilot_21_25/evidence/v22_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B8",
+      "field": "topics_id",
+      "old": 79,
+      "new": 108,
+      "reason": "Нули f находятся как критические точки её первообразной F; лист 79 об иррациональном знаменателе не относится к задаче.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar22.pdf",
+        "reports/pilot_21_25/evidence/v22_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C2",
+      "field": "topics_id",
+      "old": 571,
+      "new": "Площади сечений пирамид",
+      "reason": "Угол сечения с основанием 30°, не перпендикулярные плоскости листа 571; точного листа площадей сечений пирамид нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar22.pdf",
+        "reports/pilot_21_25/evidence/v22_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C5",
+      "field": "topics_id",
+      "old": 261,
+      "new": "Квадратные уравнения с параметром и показательной зависимостью коэффициентов",
+      "reason": "В условии нет тригонометрии листа 261. Уравнение квадратично по x, параметр входит в показатели и радикал коэффициента; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar22.pdf",
+        "reports/pilot_21_25/evidence/v22_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 432,
+      "new": "Системы показательных и логарифмических неравенств",
+      "reason": "Первая строка показательная, вторая логарифмическая; лист 432 ограничен логарифмическими системами. Точного листа смешанных систем нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar22.pdf",
+        "reports/pilot_21_25/evidence/v22_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) да; б) нет.",
+      "reason": "Пустая ячейка исходной PNG дополнена из проверенной публикации для совпадающего условия. Для доказательств кратко перенесено опубликованное обоснование, собственное решение не генерировалось.",
+      "evidence": [
+        "https://mathb.ege.sdamgia.ru/problem?id=505977",
+        "reports/pilot_21_25/published_sources.json"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}

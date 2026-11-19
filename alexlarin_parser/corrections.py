@@ -23,6 +23,8 @@ def apply_task_corrections(context, tasks, *, pdf_path, exams_path, topics_path)
     Версия 1 поддерживает только категории; версия 2 дополнительно разрешает
     непустой текст condition. Версия 3 также заполняет пустой answer переносом
     из опубликованного источника с URL и методом published-source-transcription.
+    Версия 4 также исправляет непустой ответ по опубликованному источнику;
+    точное прежнее значение и доказательства обязательны, AI-кэш сохраняется.
     Правки применяются после чтения классификации
     исходного OCR: новую платную классификацию они не запускают. Категории
     исправленного условия проверяет автор коррекций при содержательной сверке.
@@ -36,7 +38,7 @@ def apply_task_corrections(context, tasks, *, pdf_path, exams_path, topics_path)
         raise ValueError("Коррекции: файл должен содержать UTF-8 JSON") from error
     if not isinstance(document, dict) or set(document) != DOCUMENT_FIELDS:
         raise ValueError("Коррекции: неверные поля документа")
-    if type(document["version"]) is not int or document["version"] not in (1, 2, 3):
+    if type(document["version"]) is not int or document["version"] not in (1, 2, 3, 4):
         raise ValueError("Коррекции: неподдерживаемая версия")
     if (document["variant_key"] != context.variant_key
             or document["source_url"] != context.source_url
@@ -50,7 +52,7 @@ def apply_task_corrections(context, tasks, *, pdf_path, exams_path, topics_path)
         raise ValueError("Коррекции: исходные метки задач повторяются")
     seen = set()
     allowed_fields = CATEGORY_FIELDS | ({"condition"} if document["version"] >= 2 else set())
-    if document["version"] == 3:
+    if document["version"] >= 3:
         allowed_fields |= {"answer"}
     for record in records:
         if not isinstance(record, dict) or set(record) != RECORD_FIELDS:
@@ -76,10 +78,10 @@ def apply_task_corrections(context, tasks, *, pdf_path, exams_path, topics_path)
         if field in {"condition", "answer"} and (not isinstance(record["new"], str) or not record["new"].strip()):
             raise ValueError("Коррекции: условие/ответ должны быть непустой строкой")
         if field == "answer":
-            if (not isinstance(current, str) or current.strip()
+            if (not isinstance(current, str) or (document["version"] == 3 and current.strip())
                     or record["method"] != "published-source-transcription"
                     or not any(item.startswith(("https://", "http://")) for item in evidence)):
-                raise ValueError("Коррекции: заполнение пустого ответа требует опубликованного источника с URL")
+                raise ValueError("Коррекции: ответ требует опубликованного источника с URL; версия 3 заполняет только пустые ответы")
         prepared[label][field] = record["new"]
 
     exams = load_catalog(exams_path, name_column="name_of_Exam",

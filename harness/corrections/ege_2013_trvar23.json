@@ -1,0 +1,85 @@
+{
+  "version": 3,
+  "variant_key": "ege_2013_trvar23",
+  "source_url": "https://alexlarin.net/ege/2013/trvar23.html",
+  "pdf_sha256": "dbb7a61fd001397d48d420acdbaf99078448e687a132c556913096b87d5010d0",
+  "corrections": [
+    {
+      "source_label": "C2",
+      "field": "condition",
+      "old": "В пирамиде SABC объемом 18 в основании лежит равнобедренный треугольник ABC. Боковая грань, проходящая через основание AB равнобедренного треугольника перпендикулярна плоскости основания пирамиды. На ребре SC отмечена точка E так, что прямая AE образует угол $45^0$ с плоскостью основания, а объём пирамиды EABC в два раза меньше объёма пирамиды SABC. Найдите площадь сечения ABE, если треугольник ABE равносторонний.",
+      "new": "В пирамиде SABC объемом 18 в основании лежит равнобедренный треугольник ABC. Боковая грань, проходящая через основание AB равнобедренного треугольника перпендикулярна плоскости основания пирамиды. На ребре SC отмечена точка E так, что прямая AE образует угол $45^{\\circ}$ с плоскостью основания, а объём пирамиды EABC в два раза меньше объёма пирамиды SABC. Найдите площадь сечения ABE, если треугольник ABE равносторонний.",
+      "reason": "В источнике градусы, не нулевая степень.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar23.pdf",
+        "reports/pilot_21_25/evidence/v23_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B7",
+      "field": "topics_id",
+      "old": 121,
+      "new": "Преобразование степеней с иррациональными показателями",
+      "reason": "Показатель √2 иррациональный, лист 121 ограничен натуральными показателями; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar23.pdf",
+        "reports/pilot_21_25/evidence/v23_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B9",
+      "field": "topics_id",
+      "old": 565,
+      "new": "Угол между диагоналями прямоугольного параллелепипеда",
+      "reason": "BD₁ и CA₁ — пересекающиеся пространственные диагонали, не скрещивающиеся прямые листа 565; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar23.pdf",
+        "reports/pilot_21_25/evidence/v23_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B11",
+      "field": "topics_id",
+      "old": 585,
+      "new": "Соотношение объёмов конуса и цилиндра с общими основанием и высотой",
+      "reason": "Требуется объём цилиндра по объёму конуса; лист 585 только о конусе. Подходящего листа комбинации этих тел нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar23.pdf",
+        "reports/pilot_21_25/evidence/v23_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 432,
+      "new": "Системы показательных и логарифмических неравенств",
+      "reason": "Первая строка показательная, вторая логарифмическая; лист 432 ограничен логарифмическими системами. Точного листа смешанных систем нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar23.pdf",
+        "reports/pilot_21_25/evidence/v23_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) Номера счастливых билетов разбиваются на пары: каждому номеру N соответствует 999999−N. Парные номера различны, поэтому количество билетов чётно. б) Каждая такая пара даёт сумму 999999 = 999·1001. Следовательно, сумма всех номеров кратна 999.",
+      "reason": "Пустая ячейка исходной PNG дополнена из проверенной публикации для совпадающего условия. Для доказательств кратко перенесено опубликованное обоснование, собственное решение не генерировалось.",
+      "evidence": [
+        "https://math-ege.sdamgia.ru/problem?id=505983",
+        "reports/pilot_21_25/published_sources.json"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}

@@ -560,3 +560,66 @@ def test_invalid_published_answer_correction_is_atomic(project, problem):
         apply_task_corrections(context, tasks, pdf_path=context.pdf_path,
             exams_path=base/'data/exams.csv', topics_path=base/'data/topics.csv')
     assert tasks == original
+
+
+def test_version_four_corrects_published_answer_and_preserves_cache(project):
+    base, contexts, _ = project
+    first, second = contexts
+    run_batch(base, contexts, client=FakeClient())
+    cached = {str(p.relative_to(first.cache_dir)): p.read_bytes()
+              for p in first.cache_dir.rglob('*.json')}
+    other = second.archive_path.read_bytes()
+    path, document = write_category_correction(base, first)
+    document['version'] = 4
+    document['corrections'].append(dict(source_label='C1', field='answer', old=r'$\sqrt{2}$',
+        new=r'$\sqrt{3}$', reason='Корень 3 в опубликованной PNG',
+        evidence=['https://example.org/answers.png', 'source PNG hash and review'],
+        method='published-source-transcription'))
+    path.write_text(json.dumps(document), encoding='utf-8')
+    report = run_batch(base, [first], client=forbid_model(FakeClient()))
+    assert report['ocr_calls'] == report['classification_calls'] == 0
+    assert read_workbook(first)[0][2][4] == r'$\sqrt{3}$'
+    assert {str(p.relative_to(first.cache_dir)): p.read_bytes()
+            for p in first.cache_dir.rglob('*.json')} == cached
+    assert second.archive_path.read_bytes() == other
+    assert report['variants'][0]['corrections']['records'] == document['corrections']
+
+
+@pytest.mark.parametrize('problem', [None, 'unapproved', 'fingerprint', 'evidence', 'unknown', 'duplicate', 'not_page_warning', 'source_warning'])
+def test_ocr_warning_resolution_requires_matching_review_and_evidence(project, problem):
+    base, contexts, source_by_key = project
+    first = contexts[0]
+    if problem == 'source_warning':
+        source_by_key[first.variant_key]['warnings'] = ['Страница 1: Source warning, not OCR']
+    class IssueClient(FakeClient):
+        def request_json(self, *args, **kwargs):
+            result = super().request_json(*args, **kwargs)
+            if kwargs.get('stage') == 'ocr':
+                result['issues'] = ['Сверить продолжение условия по PDF']
+            return result
+    initial = run_batch(base, [first], client=IssueClient())['variants'][0]
+    warnings = initial['ocr_warnings']
+    assert len(warnings) == 2
+    records = [dict(warning=w, reason='Продолжение сверено с полным PDF', evidence=['PDF page'])
+               for w in warnings]
+    review = dict(fingerprint=initial['review_fingerprint'], approved=True, findings=[],
+                  resolved_warnings=records)
+    if problem == 'unapproved': review['approved'] = False
+    elif problem == 'fingerprint': review['fingerprint'] = 'stale'
+    elif problem == 'evidence': records[-1]['evidence'] = []
+    elif problem == 'unknown': records[-1]['warning'] = 'Страница 99: Unknown issue'
+    elif problem == 'duplicate': records.append(records[0].copy())
+    elif problem == 'not_page_warning': records[-1]['warning'] = initial['warnings'][-1]
+    elif problem == 'source_warning': records[-1]['warning'] = 'Страница 1: Source warning, not OCR'
+    (first.debug_dir/'content_review.json').write_text(json.dumps(review), encoding='utf-8')
+    report = run_batch(base, [first], client=forbid_model(FakeClient()))
+    state = report['variants'][0]
+    assert report['ocr_calls'] == report['classification_calls'] == 0
+    verification = json.loads((Path(state['debug_dir'])/'verification.json').read_text())
+    if problem is None:
+        assert state['status'] == 'SUCCESS' and not state['warnings']
+        assert state['resolved_warnings'] == verification['resolved_warnings'] == records
+    else:
+        assert state['status'] == 'NEEDS_REVIEW'
+        assert all(w in state['warnings'] for w in warnings)
+        assert not state['resolved_warnings']

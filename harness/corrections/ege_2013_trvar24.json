@@ -1,0 +1,136 @@
+{
+  "version": 3,
+  "variant_key": "ege_2013_trvar24",
+  "source_url": "https://alexlarin.net/ege/2013/trvar24.html",
+  "pdf_sha256": "bc301b2aa35c705d54083c774b98cdf0801b7d9892f8653c7bb4fbed01aaa131",
+  "corrections": [
+    {
+      "source_label": "B12",
+      "field": "condition",
+      "old": "Независимое агентство намерено ввести рейтинг новостных интернет-изданий на основе оценок информативности $In$, оперативности $Op$, объективности публикаций $Tr$, а также качества сайта $Q$. Каждый отдельный показатель оценивается читателями по 5-балльной шкале целыми числами от -2 до 2.",
+      "new": "Независимое агентство намерено ввести рейтинг новостных интернет-изданий на основе оценок информативности $In$, оперативности $Op$, объективности публикаций $Tr$, а также качества сайта $Q$. Каждый отдельный показатель оценивается читателями по 5-балльной шкале целыми числами от -2 до 2.\nАналитики, составляющие формулу рейтинга, считают, что объективность ценится втрое, а информативность публикаций — впятеро дороже, чем оперативность и качество сайта. Таким образом, формула приняла вид $R=\\frac{5In+Op+3Tr+Q}{A}$. Если по всем четырём показателям какое-то издание получило одну и ту же оценку, то рейтинг должен совпадать с этой оценкой. Найдите число A, при котором это условие будет выполняться.",
+      "reason": "Полностью пропущено продолжение B12 в начале страницы 3: веса показателей, формула, требование и вопрос.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar24.pdf#page=3",
+        "reports/pilot_21_25/evidence/v24_page3.png"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B1",
+      "field": "topics_id",
+      "old": 19,
+      "new": 7,
+      "reason": "Цена 10 руб. 70 коп. и результат десятичные; лист натуральных чисел 19 не отражает вычисления.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar24.pdf",
+        "reports/pilot_21_25/evidence/v24_page1.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B4",
+      "field": "exams_id",
+      "old": 92,
+      "new": 22,
+      "reason": "Простой расчёт цены двух покупок, а не финансовая оптимизация C5.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar24.pdf",
+        "reports/pilot_21_25/evidence/v24_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B4",
+      "field": "topics_id",
+      "old": 141,
+      "new": 19,
+      "reason": "Арифметическое сравнение двух вариантов покупки; лист 141 излишне общий.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar24.pdf",
+        "reports/pilot_21_25/evidence/v24_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B10",
+      "field": "exams_id",
+      "old": 194,
+      "new": 193,
+      "reason": "Запрашивается полная вероятность положительного анализа, не обратная вероятность болезни по положительному тесту.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar24.pdf",
+        "reports/pilot_21_25/evidence/v24_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B10",
+      "field": "topics_id",
+      "old": 596,
+      "new": "Формула полной вероятности",
+      "reason": "Лист 596 о Байесе не описывает прямое вычисление вероятности положительного теста; точного листа полной вероятности нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar24.pdf",
+        "reports/pilot_21_25/evidence/v24_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B11",
+      "field": "exams_id",
+      "old": 185,
+      "new": 187,
+      "reason": "Многогранник ABCDEFA₁ — пирамида с основанием ABCDEF и вершиной A₁; требуется её объём.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar24.pdf",
+        "reports/pilot_21_25/evidence/v24_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B11",
+      "field": "topics_id",
+      "old": 584,
+      "new": 574,
+      "reason": "Указанные вершины образуют пирамиду, а не призму листа 584.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar24.pdf",
+        "reports/pilot_21_25/evidence/v24_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 432,
+      "new": "Системы показательных и логарифмических неравенств",
+      "reason": "Первая строка показательная, вторая логарифмическая; лист 432 ограничен логарифмическими системами. Точного листа смешанных систем нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar24.pdf",
+        "reports/pilot_21_25/evidence/v24_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) Перестановки 12 достоинств, отличных от тузов, разбивают правильные колоды на группы из 12! различных колод. б) Опубликованное доказательство рассматривает замкнутые ладейные обходы доски 4×13: циклические сдвиги столбцов с возвратом начала к тузу пик дают группы из 13 обходов. Поэтому число колод кратно 12! и 13, следовательно, кратно 13!.",
+      "reason": "Пустая ячейка исходной PNG дополнена из проверенной публикации для совпадающего условия. Для доказательств кратко перенесено опубликованное обоснование, собственное решение не генерировалось.",
+      "evidence": [
+        "https://ege.sdamgia.ru/problem?id=505989",
+        "reports/pilot_21_25/published_sources.json"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}

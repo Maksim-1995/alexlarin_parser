@@ -1,0 +1,175 @@
+{
+  "version": 3,
+  "variant_key": "ege_2013_trvar21",
+  "source_url": "https://alexlarin.net/ege/2013/trvar21.html",
+  "pdf_sha256": "f51d9c43a78b84f6229c9a8935b78c85c5ea89ad0219ba86877abc45dd17f2bf",
+  "corrections": [
+    {
+      "source_label": "B4",
+      "field": "condition",
+      "old": "Независимая экспертная лаборатория определяет рейтинг R бытовых приборов на основе коэффициента ценности, равного 0,01 средней цены P, показателей функциональности F, качества Q и дизайна D. Каждый из показателей оценивается целым числом от 0 до 4. Итоговый рейтинг вычисляется по формуле",
+      "new": "Независимая экспертная лаборатория определяет рейтинг R бытовых приборов на основе коэффициента ценности, равного 0,01 средней цены P, показателей функциональности F, качества Q и дизайна D. Каждый из показателей оценивается целым числом от 0 до 4. Итоговый рейтинг вычисляется по формуле $R=4(2F+2Q+D)-0{,}01P$.\nВ таблице даны средняя цена и оценки каждого показателя для нескольких моделей электрических мясорубок. Определите наивысший рейтинг представленных в таблице моделей электрических мясорубок.\n<table><tr><th>Модель мясорубки</th><th>Средняя цена</th><th>Функциональность</th><th>Качество</th><th>Дизайн</th></tr><tr><td>А</td><td>4600</td><td>2</td><td>0</td><td>2</td></tr><tr><td>Б</td><td>5500</td><td>4</td><td>3</td><td>1</td></tr><tr><td>В</td><td>4800</td><td>4</td><td>4</td><td>4</td></tr><tr><td>Г</td><td>4700</td><td>2</td><td>1</td><td>4</td></tr></table>",
+      "reason": "Восстановлено пропущенное продолжение B4 со страницы 2: формула, вопрос и все ячейки таблицы.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar21.pdf#page=2",
+        "reports/pilot_21_25/evidence/v21_page2.png"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B4",
+      "field": "exams_id",
+      "old": 126,
+      "new": 22,
+      "reason": "Прямое вычисление рейтинга и сравнение моделей, не рациональное уравнение.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar21.pdf",
+        "reports/pilot_21_25/evidence/v21_page1.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B4",
+      "field": "topics_id",
+      "old": 141,
+      "new": 19,
+      "reason": "Арифметическая задача выбора по таблице и заданной формуле; лист 141 неоправданно общий.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar21.pdf",
+        "reports/pilot_21_25/evidence/v21_page1.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B6",
+      "field": "topics_id",
+      "old": 181,
+      "new": "Радиус вписанной окружности четырёхугольника на квадратной решётке",
+      "reason": "Требуется радиус вписанной окружности с размерами по сетке. Лист 181 про основные определения круга не описывает задачу; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar21.pdf",
+        "reports/pilot_21_25/evidence/v21_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B8",
+      "field": "topics_id",
+      "old": 515,
+      "new": "Разность значений первообразной по графику функции",
+      "reason": "Требуется разность значений первообразной, не планиметрическая задача листа 515. Точного листа первообразной/интеграла в topics нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar21.pdf",
+        "reports/pilot_21_25/evidence/v21_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B9",
+      "field": "topics_id",
+      "old": 565,
+      "new": "Угол между пересекающимися прямыми в кубе",
+      "reason": "AD₁ и B₁D₁ имеют общую точку D₁; лист 565 про скрещивающиеся прямые неверен. Точного листа пересекающихся прямых в пространстве нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar21.pdf",
+        "reports/pilot_21_25/evidence/v21_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B11",
+      "field": "topics_id",
+      "old": 579,
+      "new": "Цилиндр, вписанный в правильную четырёхугольную призму",
+      "reason": "Дана боковая поверхность призмы, не цилиндра. Лист 579 площади поверхности цилиндра не отражает комбинацию тел; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar21.pdf",
+        "reports/pilot_21_25/evidence/v21_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B12",
+      "field": "topics_id",
+      "old": 141,
+      "new": 476,
+      "reason": "Искомый минимальный угол определяется ограничением на период решётки; это текстовая задача с неравенством.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar21.pdf",
+        "reports/pilot_21_25/evidence/v21_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C2",
+      "field": "topics_id",
+      "old": 571,
+      "new": "Площади сечений призм",
+      "reason": "Лист 571 ограничен перпендикулярностью плоскостей; описано наклонное сечение призмы. Точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar21.pdf",
+        "reports/pilot_21_25/evidence/v21_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C4",
+      "field": "exams_id",
+      "old": 244,
+      "new": 246,
+      "reason": "Окружность построена на стороне как на диаметре, она не вписана в треугольник. Подходит лист разных задач об окружностях и треугольниках.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar21.pdf",
+        "reports/pilot_21_25/evidence/v21_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C5",
+      "field": "topics_id",
+      "old": 270,
+      "new": "Системы алгебраических уравнений и неравенств с параметром",
+      "reason": "В условии нет тригонометрии, лист 270 неверен; подходящего листа параметрических смешанных алгебраических систем нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar21.pdf",
+        "reports/pilot_21_25/evidence/v21_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 432,
+      "new": "Системы показательных и логарифмических неравенств",
+      "reason": "Первая строка показательная, вторая логарифмическая; лист 432 ограничен логарифмическими системами. Точного листа смешанных систем нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar21.pdf",
+        "reports/pilot_21_25/evidence/v21_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) да; б) нет.",
+      "reason": "Пустая ячейка исходной PNG дополнена из проверенной публикации для совпадающего условия. Для доказательств кратко перенесено опубликованное обоснование, собственное решение не генерировалось.",
+      "evidence": [
+        "https://mathb.ege.sdamgia.ru/problem?id=505971",
+        "reports/pilot_21_25/published_sources.json"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}
