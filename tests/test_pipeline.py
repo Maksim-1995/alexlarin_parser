@@ -498,3 +498,65 @@ def test_invalid_condition_corrections_are_atomic(project, problem):
         apply_category_corrections(context, tasks, pdf_path=context.pdf_path,
                                    exams_path=base/'data/exams.csv', topics_path=base/'data/topics.csv')
     assert tasks == original
+
+
+def test_published_answer_fills_missing_answer_without_model_calls(project):
+    base, contexts, _ = project
+    first, second = contexts
+    class MissingAnswerClient(FakeClient):
+        def request_json(self, *args, **kwargs):
+            result = super().request_json(*args, **kwargs)
+            if kwargs.get('stage') == 'ocr':
+                result['answers'] = {}
+            return result
+    # The fixture's HTML provides B1; C1 has no HTML answer.
+    run_batch(base, contexts, client=MissingAnswerClient())
+    cached = {str(p.relative_to(first.cache_dir)): p.read_bytes()
+              for p in first.cache_dir.rglob('*.json')}
+    other_zip = second.archive_path.read_bytes()
+    path, document = write_category_correction(base, first)
+    document['version'] = 3
+    document['corrections'].append(dict(source_label='C1', field='answer', old='',
+        new='а) да; б) нет.', reason='Перенос опубликованного ответа для того же условия',
+        evidence=['https://example.org/published-answer', 'local verified source excerpt'],
+        method='published-source-transcription'))
+    path.write_text(json.dumps(document), encoding='utf-8')
+    report = run_batch(base, [first], client=forbid_model(FakeClient()))
+    state = report['variants'][0]
+    assert report['ocr_calls'] == report['classification_calls'] == 0
+    assert not state['missing_answers'] and state['answers_count'] == 2
+    assert not any('опубликованный ответ отсутствует' in w for w in state['warnings'])
+    rows, _ = read_workbook(first)
+    assert rows[2][4] == 'а) да;<br>б) нет.' and rows[2][3] is None
+    assert {str(p.relative_to(first.cache_dir)): p.read_bytes()
+            for p in first.cache_dir.rglob('*.json')} == cached
+    assert second.archive_path.read_bytes() == other_zip
+    assert state['corrections']['records'] == document['corrections']
+
+
+@pytest.mark.parametrize('problem', ['old', 'empty', 'non_string', 'method', 'url', 'version_two'])
+def test_invalid_published_answer_correction_is_atomic(project, problem):
+    from alexlarin_parser.corrections import apply_task_corrections
+    base, contexts, _ = project
+    context = contexts[0]
+    tasks = [dict(task_num=1, source_label='B1', condition='Condition', answer='',
+                  exams_id=11, topics_id=11)]
+    path, document = write_category_correction(base, context)
+    document['version'] = 3
+    record = dict(source_label='B1', field='answer', old='', new='Published answer',
+        reason='Same source condition', evidence=['https://example.org/answer'],
+        method='published-source-transcription')
+    document['corrections'].append(record)
+    if problem == 'old':
+        tasks[0]['answer'] = record['old'] = 'Existing published answer'
+    elif problem == 'empty': record['new'] = ' '
+    elif problem == 'non_string': record['new'] = 1
+    elif problem == 'method': record['method'] = 'model-solution'
+    elif problem == 'url': record['evidence'] = ['no source URL']
+    elif problem == 'version_two': document['version'] = 2
+    original = copy.deepcopy(tasks)
+    path.write_text(json.dumps(document), encoding='utf-8')
+    with pytest.raises(ValueError):
+        apply_task_corrections(context, tasks, pdf_path=context.pdf_path,
+            exams_path=base/'data/exams.csv', topics_path=base/'data/topics.csv')
+    assert tasks == original

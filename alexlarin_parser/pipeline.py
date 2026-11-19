@@ -178,6 +178,8 @@ def _classify_tasks(base_dir, context, tasks, state, client, *, cache_dir, pdf_p
     )
     if corrections:
         state["corrections"] = corrections
+        state["missing_answers"] = [t["source_label"] for t in tasks if not t["answer"].strip()]
+        state["answers_count"] = len(tasks) - len(state["missing_answers"])
     state["warnings"].extend(classification_review_warnings(
         tasks, exams_path=exams_path, topics_path=topics_path,
     ))

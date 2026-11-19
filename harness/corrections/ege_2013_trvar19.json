@@ -1,0 +1,86 @@
+{
+  "version": 2,
+  "variant_key": "ege_2013_trvar19",
+  "source_url": "https://alexlarin.net/ege/2013/trvar19.html",
+  "pdf_sha256": "650fc910a35166350509e2f38ab82e7eec5fa9e0f8970d4f4b71c771b37d8ba4",
+  "corrections": [
+    {
+      "source_label": "B4",
+      "field": "condition",
+      "old": "Рейтинговое агентство определяет рейтинг соотношения «цена-качество» микроволновых печей. Рейтинг вычисляется на основе средней цены P и оценок функциональности F, качества Q и дизайна D. Каждый отдельный показатель оценивается экспертами по 5-балльной шкале целыми числами от 0 до 4. Итоговый рейтинг вычисляется по формуле $R = 8(F + Q) + 4D - 0{,}01P$ В таблице даны оценки каждого показателя для нескольких моделей печей. Определите, какая модель имеет наивысший рейтинг. В ответ запишите значение этого рейтинга.",
+      "new": "Рейтинговое агентство определяет рейтинг соотношения «цена-качество» микроволновых печей. Рейтинг вычисляется на основе средней цены P и оценок функциональности F, качества Q и дизайна D. Каждый отдельный показатель оценивается экспертами по 5-балльной шкале целыми числами от 0 до 4. Итоговый рейтинг вычисляется по формуле $R = 8(F + Q) + 4D - 0{,}01P$ В таблице даны оценки каждого показателя для нескольких моделей печей. Определите, какая модель имеет наивысший рейтинг. В ответ запишите значение этого рейтинга.\n<table><tr><th>Модель печи</th><th>Средняя цена</th><th>Функциональность</th><th>Качество</th><th>Дизайн</th></tr><tr><td>А</td><td>1900</td><td>1</td><td>1</td><td>1</td></tr><tr><td>Б</td><td>5900</td><td>4</td><td>1</td><td>2</td></tr><tr><td>В</td><td>3800</td><td>0</td><td>0</td><td>1</td></tr><tr><td>Г</td><td>4100</td><td>2</td><td>0</td><td>4</td></tr></table>",
+      "reason": "Таблица продолжения B4 находится вверху страницы 2 и полностью пропущена OCR. Все ячейки вручную перенесены по PDF.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar19.pdf",
+        "reports/pilot_18_20/evidence/v19_page1.png",
+        "data/exams.csv; data/topics.csv — проверены полные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B6",
+      "field": "condition",
+      "old": "В ромбе ABCD угол ABC равен $122^{0}$. Найдите угол ACD. Ответ дайте в градусах.",
+      "new": "В ромбе ABCD угол ABC равен $122^{\\circ}$. Найдите угол ACD. Ответ дайте в градусах.",
+      "reason": "В источнике угол в градусах, не степень ноль.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar19.pdf",
+        "reports/pilot_18_20/evidence/v19_page2.png",
+        "data/exams.csv; data/topics.csv — проверены полные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B8",
+      "field": "topics_id",
+      "old": 515,
+      "new": "Вычисление площади криволинейной трапеции по первообразной",
+      "reason": "Лист 515 находится в планиметрии и не описывает первообразную/интеграл. Точного листа интеграла в полном дереве нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar19.pdf",
+        "reports/pilot_18_20/evidence/v19_page2.png",
+        "data/exams.csv; data/topics.csv — проверены полные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C2",
+      "field": "topics_id",
+      "old": 571,
+      "new": "Площади сечений пирамид",
+      "reason": "Лист 571 имеет конечную тему перпендикулярности плоскостей. Здесь сечение задаётся параллельностью диагонали; точного листа площадей сечений пирамид нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar19.pdf",
+        "reports/pilot_18_20/evidence/v19_page3.png",
+        "data/exams.csv; data/topics.csv — проверены полные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 432,
+      "new": "Системы показательных и логарифмических неравенств",
+      "reason": "Первая строка показательная, вторая логарифмическая; лист 432 охватывает только логарифмические системы.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar19.pdf",
+        "reports/pilot_18_20/evidence/v19_page3.png",
+        "data/exams.csv; data/topics.csv — проверены полные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C5",
+      "field": "topics_id",
+      "old": 269,
+      "new": "Алгебраические неравенства с параметром при ограничениях на переменные",
+      "reason": "Лист 269 тригонометрический; в условии только квадратные выражения и |x|=|y|. Подходящего листа параметрических алгебраических неравенств нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar19.pdf",
+        "reports/pilot_18_20/evidence/v19_page3.png",
+        "data/exams.csv; data/topics.csv — проверены полные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    }
+  ]
+}

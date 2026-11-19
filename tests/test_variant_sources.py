@@ -210,6 +210,21 @@ def test_split_cyrillic_letter_in_sentence_with_year_is_not_task_label():
     assert [item["source_label"] for item in task_positions(page)] == ["B1", "B13", "C1"]
 
 
+@pytest.mark.parametrize("rotation", [0, 90])
+def test_small_vertex_at_start_of_pdf_block_does_not_start_task(rotation):
+    from types import SimpleNamespace
+    # C₁ continues B11 on the next body line, at the task-label indent.
+    visible = [(30, 100, 55, 116, "B11", 1, 0, 0),
+               (30, 118, 39, 127, "C1", 2, 0, 0),
+               (30, 180, 48, 196, "C1", 3, 0, 0)]
+    matrix = pymupdf.Matrix(rotation)
+    words = [(*tuple(pymupdf.Rect(*w[:4]) * ~matrix), *w[4:]) for w in visible]
+    page = SimpleNamespace(get_text=lambda kind: words, rotation_matrix=matrix)
+    positions = task_positions(page)
+    assert [p["source_label"] for p in positions] == ["B11", "C1"]
+    assert positions[1]["y"] == pytest.approx(180)
+
+
 def test_rotated_pdf_positions_match_rendered_page_coordinates():
     with pymupdf.open() as document:
         page = document.new_page(width=595, height=842)

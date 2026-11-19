@@ -1,0 +1,112 @@
+{
+  "version": 3,
+  "variant_key": "ege_2013_trvar20",
+  "source_url": "https://alexlarin.net/ege/2013/trvar20.html",
+  "pdf_sha256": "5ac575d1763e7d8688daa7128c4457aa2f10fd41450c8f8edc3b1b9cc81ab5dc",
+  "corrections": [
+    {
+      "source_label": "B4",
+      "field": "condition",
+      "old": "Независимое агентство каждый месяц определяет рейтинги R новостных сайтов на основе показателей информативности In, оперативности Op и объективности Tr публикаций. Каждый отдельный показатель оценивается целыми числами от -2 до 2. Итоговый рейтинг вычисляется по формуле $R = 25\\left(\\frac{2In + Op + 3Tr}{6} + 2\\right)$ В таблице даны оценки каждого показателя для нескольких новостных сайтов. Определите наивысший рейтинг новостных сайтов, представленных в таблице. Запишите его в ответ, округлив до целого числа. \\begin{array}{|c|c|c|c|} \\hline Сайт & Информативность & Оперативность & Объективность \\\\ \\hline VoKak.ru & -1 & -1 & -1 \\\\ \\hline NashiNovosti.com & 2 & 2 & -1 \\\\ \\hline Bezvrak.ru & -1 & 2 & 0 \\\\ \\hline Zhizni.net & -1 & -1 & -2 \\\\ \\hline \\end{array}",
+      "new": "Независимое агентство каждый месяц определяет рейтинги R новостных сайтов на основе показателей информативности In, оперативности Op и объективности Tr публикаций. Каждый отдельный показатель оценивается целыми числами от -2 до 2. Итоговый рейтинг вычисляется по формуле $R = 25\\left(\\frac{2In + Op + 3Tr}{6} + 2\\right)$ В таблице даны оценки каждого показателя для нескольких новостных сайтов. Определите наивысший рейтинг новостных сайтов, представленных в таблице. Запишите его в ответ, округлив до целого числа.\n<table><tr><th>Сайт</th><th>Информативность</th><th>Оперативность</th><th>Объективность</th></tr><tr><td>VoKak.ru</td><td>-1</td><td>-1</td><td>-1</td></tr><tr><td>NashiNovosti.com</td><td>2</td><td>2</td><td>-1</td></tr><tr><td>Bezvrak.ru</td><td>-1</td><td>2</td><td>0</td></tr><tr><td>Zhizni.net</td><td>-1</td><td>-1</td><td>-2</td></tr></table>",
+      "reason": "LaTeX array вне формулы заменён поддерживаемой HTML-таблицей; имя VoKak.ru сверено по PDF.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar20.pdf",
+        "reports/pilot_18_20/evidence/v20_page2.png",
+        "data/exams.csv; data/topics.csv — проверены полные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B6",
+      "field": "condition",
+      "old": "Найдите центральный угол AOB, если он на $15^0$ больше вписанного угла ACB, опирающегося на ту же дугу. Ответ дайте в градусах.",
+      "new": "Найдите центральный угол AOB, если он на $15^{\\circ}$ больше вписанного угла ACB, опирающегося на ту же дугу. Ответ дайте в градусах.",
+      "reason": "В источнике угол в градусах, не степень ноль.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar20.pdf",
+        "reports/pilot_18_20/evidence/v20_page2.png",
+        "data/exams.csv; data/topics.csv — проверены полные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C2",
+      "field": "condition",
+      "old": "В правильной треугольной призме $ABCA_1B_1C_1$ со стороной основания равной $1 + \\sqrt{3}$ и высотой равной 2 проведено сечение через прямую $BC$, которое делит призму на 2 многогранника равных объемов. Найти площади этого сечения.",
+      "new": "В правильной треугольной призме $ABCA_1B_1C_1$ со стороной основания равной $1 + \\sqrt{3}$ и высотой равной 2 проведено сечение через прямую $BC$, которое делит призму на 2 многогранника равных объемов. Найти площадь этого сечения.",
+      "reason": "Источник содержит единственное число «площадь».",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar20.pdf",
+        "reports/pilot_18_20/evidence/v20_page3.png",
+        "data/exams.csv; data/topics.csv — проверены полные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B8",
+      "field": "topics_id",
+      "old": 515,
+      "new": "Вычисление площади криволинейной трапеции по первообразной",
+      "reason": "Лист 515 находится в планиметрии; в задаче используется первообразная. Точного листа интеграла нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar20.pdf",
+        "reports/pilot_18_20/evidence/v20_page2.png",
+        "data/exams.csv; data/topics.csv — проверены полные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "B10",
+      "field": "topics_id",
+      "old": 596,
+      "new": "Формула полной вероятности",
+      "reason": "Даны вероятности брака и двух исходов контроля; требуется полная вероятность отбраковки, а не обратная условная вероятность Байеса. Точного листа полной вероятности нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar20.pdf",
+        "reports/pilot_18_20/evidence/v20_page2.png",
+        "data/exams.csv; data/topics.csv — проверены полные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C2",
+      "field": "topics_id",
+      "old": 571,
+      "new": "Площади сечений призм",
+      "reason": "Лист 571 требует перпендикулярности плоскостей. Здесь определяет сечение равенство объёмов; точного листа площадей сечений призм нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar20.pdf",
+        "reports/pilot_18_20/evidence/v20_page3.png",
+        "data/exams.csv; data/topics.csv — проверены полные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C5",
+      "field": "exams_id",
+      "old": 252,
+      "new": 254,
+      "reason": "Дано неравенство с параметром; лист 252 относится к уравнениям с модулем.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar20.pdf",
+        "reports/pilot_18_20/evidence/v20_page3.png",
+        "data/exams.csv; data/topics.csv — проверены полные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-19"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) да; б) нет.",
+      "reason": "Пустая ячейка исходного PNG дополнена опубликованным ответом для дословно совпадающего условия из дополнительного источника; это не ответ OCR и не собственное решение.",
+      "evidence": [
+        "https://mathb.ege.sdamgia.ru/problem?id=505965",
+        "reports/quality_18_20_c6/published_sources.json",
+        "input/variants/ege_2013_trvar20/source/trvar20.pdf#page=3"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}
