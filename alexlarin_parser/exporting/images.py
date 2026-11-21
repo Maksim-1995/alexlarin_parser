@@ -31,9 +31,9 @@ def _owner(rect, anchors, tasks, page_number, page_width):
     right = starts[column + 1] if column + 1 < len(starts) else page_width
     same_column = [item for item in anchors if left <= item["x"] < right]
     # Высокий график может находиться сбоку сразу от нескольких условий.
-    # Его верх, с допуском в две высоты метки, указывает начало задачи;
+    # Его верх, с допуском в две с половиной высоты метки, указывает начало задачи;
     # середина рисунка может уже оказаться рядом со следующей задачей.
-    tolerance = max([3, *(2 * (item.get("y1", item["y"] + 16) - item["y"]) for item in same_column)])
+    tolerance = max([3, *(2.5 * (item.get("y1", item["y"] + 16) - item["y"]) for item in same_column)])
     above = [item for item in same_column if item["y"] <= rect.y0 + tolerance]
     # У последней задачи продолжение может занимать всю правую колонку:
     # новых меток справа нет, поэтому starts содержит только левую колонку.

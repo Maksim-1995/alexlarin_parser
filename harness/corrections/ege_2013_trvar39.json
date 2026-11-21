@@ -1,0 +1,125 @@
+{
+  "version": 3,
+  "variant_key": "ege_2013_trvar39",
+  "source_url": "https://alexlarin.net/ege/2013/trvar39.html",
+  "pdf_sha256": "a8af2f3fcd0756823c7a7140a363432a127d17ad869ed682b2c4d4853fd1d1c7",
+  "corrections": [
+    {
+      "source_label": "B6",
+      "field": "condition",
+      "old": "Сторона ромба равна 1, острый угол равен $30^0$. Найдите радиус вписанной окружности этого ромба.",
+      "new": "Сторона ромба равна 1, острый угол равен $30^\\circ$. Найдите радиус вписанной окружности этого ромба.",
+      "reason": "Знак градуса вместо нулевой степени.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar39.pdf",
+        "reports/pilot_36_40/evidence/v39_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B1",
+      "field": "topics_id",
+      "old": 19,
+      "new": 18,
+      "reason": "Стоимость минуты дробная: 2 рубля 50 копеек.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar39.pdf",
+        "reports/pilot_36_40/evidence/v39_page1.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B6",
+      "field": "topics_id",
+      "old": 512,
+      "new": 480,
+      "reason": "Радиус вписанной окружности ромба; площадь в условии не требуется.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar39.pdf",
+        "reports/pilot_36_40/evidence/v39_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B7",
+      "field": "topics_id",
+      "old": 121,
+      "new": "Преобразование степенных выражений с переменным показателем",
+      "reason": "В показателях x−9 и x−11 нет ограничения натуральности; лист 121 относится к натуральным показателям и одинаковым показателям. Точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar39.pdf",
+        "reports/pilot_36_40/evidence/v39_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B9",
+      "field": "topics_id",
+      "old": 591,
+      "new": "Угол между пересекающимися прямыми в прямоугольном многограннике",
+      "reason": "FAD2 — плоский угол двух прямых, не двугранный угол листа 591; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar39.pdf",
+        "reports/pilot_36_40/evidence/v39_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B12",
+      "field": "topics_id",
+      "old": 257,
+      "new": 476,
+      "reason": "Определяется минимальный угол из ограничения силы — прикладное неравенство, не только простейшее уравнение.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar39.pdf",
+        "reports/pilot_36_40/evidence/v39_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 432,
+      "new": "Системы показательных и логарифмических неравенств с радикалами",
+      "reason": "В показателях есть радикалы и отдельно логарифм с переменным основанием; точного смешанного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar39.pdf",
+        "reports/pilot_36_40/evidence/v39_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C6",
+      "field": "topics_id",
+      "old": 638,
+      "new": 47,
+      "reason": "Исследуется последовательность сумм цифр; это числовая последовательность, деление с остатком не является предметом вопроса.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar39.pdf",
+        "reports/pilot_36_40/evidence/v39_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) 111111111; б) раньше встретится число 27 четыре раза подряд.",
+      "reason": "Пустой C6 исходной PNG дополнен ответом из совпадающей опубликованной задачи; собственное решение не генерировалось.",
+      "evidence": [
+        "https://math-ege.sdamgia.ru/problem?id=506079",
+        "Совпадают кратные 9, ряд сумм цифр, вопросы о 81 и о четырёх 27 против одной 36.",
+        "reports/pilot_36_40/published_sources.json"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}

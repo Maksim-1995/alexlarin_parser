@@ -1,0 +1,177 @@
+{
+  "version": 3,
+  "variant_key": "ege_2014_trvar40",
+  "source_url": "https://alexlarin.net/ege/2014/trvar40.html",
+  "pdf_sha256": "826416476b156938eb6ac8ed16c229d73c548c17f03a24fd0ea7da40d333abbd",
+  "corrections": [
+    {
+      "source_label": "C6",
+      "field": "condition",
+      "old": "В трёх вершинах квадрата находятся три кузнечика. Они играют в чехарду, т.е. прыгают друг через друга. При этом, если кузнечик А прыгает через кузнечика В, то после прыжка он оказывается от В на том же расстоянии, что и до прыжка, и, естественно, на той же прямой. Может ли один из них попасть в четвёртую вершину квадрата?.",
+      "new": "В трёх вершинах квадрата находятся три кузнечика. Они играют в чехарду, т.е. прыгают друг через друга. При этом, если кузнечик А прыгает через кузнечика В, то после прыжка он оказывается от В на том же расстоянии, что и до прыжка, и, естественно, на той же прямой. Может ли один из них попасть в четвёртую вершину квадрата?",
+      "reason": "Удалена лишняя точка OCR после вопросительного знака; по PDF один знак вопроса.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar40.pdf",
+        "reports/pilot_36_40/evidence/v40_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B1",
+      "field": "topics_id",
+      "old": 19,
+      "new": 18,
+      "reason": "Цена бензина 22,5 рубля — вычисления с дробями.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar40.pdf",
+        "reports/pilot_36_40/evidence/v40_page1.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B4",
+      "field": "exams_id",
+      "old": 92,
+      "new": 22,
+      "reason": "Два прямых арифметических расчёта стоимости, не сложная финансовая оптимизация C5.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar40.pdf",
+        "reports/pilot_36_40/evidence/v40_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B4",
+      "field": "topics_id",
+      "old": 141,
+      "new": 19,
+      "reason": "Простой расчёт стоимости в натуральных числах по данным двух вариантов.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar40.pdf",
+        "reports/pilot_36_40/evidence/v40_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B6",
+      "field": "topics_id",
+      "old": 514,
+      "new": "Трапеция с вписанной окружностью",
+      "reason": "Требуется высота через диаметр, не площадь трапеции листа 514; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar40.pdf",
+        "reports/pilot_36_40/evidence/v40_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B9",
+      "field": "topics_id",
+      "old": 629,
+      "new": "Угол между пересекающимися прямыми в прямоугольном многограннике",
+      "reason": "Требуется угол D2EF по рёбрам и размерам; лист пространственных фигур 629 слишком общий, точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar40.pdf",
+        "reports/pilot_36_40/evidence/v40_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B12",
+      "field": "topics_id",
+      "old": 141,
+      "new": 476,
+      "reason": "Наименьший угол из ограничения высоты — неравенство в прикладной задаче, а не разные методы листа 141.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar40.pdf",
+        "reports/pilot_36_40/evidence/v40_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C2",
+      "field": "topics_id",
+      "old": 571,
+      "new": "Площадь сечения пирамиды биссекторной плоскостью двугранного угла",
+      "reason": "Сечение делит угол пополам; перпендикулярность плоскостей листа 571 не дана. Точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar40.pdf",
+        "reports/pilot_36_40/evidence/v40_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 436,
+      "new": "Системы рациональных и показательных неравенств",
+      "reason": "В системе есть показательная часть, поэтому чисто алгебраический лист 436 недостаточен; точного смешанного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar40.pdf",
+        "reports/pilot_36_40/evidence/v40_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C4",
+      "field": "topics_id",
+      "old": 633,
+      "new": 667,
+      "reason": "В условии четырёхугольник с перпендикулярными диагоналями; подходящий существующий лист вместо теоремы Птолемея о произведениях диагоналей.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar40.pdf",
+        "reports/pilot_36_40/evidence/v40_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C5",
+      "field": "topics_id",
+      "old": 270,
+      "new": "Тригонометрические неравенства с параметром",
+      "reason": "Требование для всех x к неравенству с параметром, не преобразование произведения в сумму из листа 270; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar40.pdf",
+        "reports/pilot_36_40/evidence/v40_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C6",
+      "field": "topics_id",
+      "old": 141,
+      "new": "Инварианты чётности в задачах о перемещениях",
+      "reason": "Сюжет о прыжках с сохранением чётности координат, не просто текстовая задача разных методов; точного листа инвариантов нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar40.pdf",
+        "reports/pilot_36_40/evidence/v40_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "Не может.",
+      "reason": "Пустой C6 исходной PNG дополнен ответом из совпадающей опубликованной задачи; собственное решение не генерировалось.",
+      "evidence": [
+        "https://problems.ru/view_problem_details_new.php?id=79240",
+        "Совпадают три кузнечика в трёх вершинах квадрата, прыжок центральной симметрии и вопрос о четвёртой вершине. Публикация Ю. И. Ионина, ММО 1973, 8 класс, задача 5.",
+        "reports/pilot_36_40/published_sources.json"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}

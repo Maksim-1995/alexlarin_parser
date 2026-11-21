@@ -1,0 +1,229 @@
+{
+  "version": 3,
+  "variant_key": "ege_2013_trvar37",
+  "source_url": "https://alexlarin.net/ege/2013/trvar37.html",
+  "pdf_sha256": "8c43ca5e9e28a9c5bff24975ed2f717ae0c7d48ef966dd55f38884ce313ddbd3",
+  "corrections": [
+    {
+      "source_label": "B6",
+      "field": "condition",
+      "old": "Угол C треугольника ABC, вписанного в окружность радиуса 3, равен $30^0$. Найдите сторону AB этого треугольника.",
+      "new": "Угол C треугольника ABC, вписанного в окружность радиуса 3, равен $30^\\circ$. Найдите сторону AB этого треугольника.",
+      "reason": "Знак градуса вместо нулевой степени.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar37.pdf",
+        "reports/pilot_36_40/evidence/v37_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B7",
+      "field": "condition",
+      "old": "Найдите значение выражения $\\frac{-19\\sin 94^0}{\\sin 47^0 \\sin 43^0}$.",
+      "new": "Найдите значение выражения $\\frac{-19\\sin 94^\\circ}{\\sin 47^\\circ \\sin 43^\\circ}$.",
+      "reason": "Все три угла в градусах по PDF, не в нулевой степени.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar37.pdf",
+        "reports/pilot_36_40/evidence/v37_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B10",
+      "field": "condition",
+      "old": "В группе туристов 30 человек. Их вертолётом в несколько приёмов забирасывают в труднодоступный район по 6 человек за рейс. Порядок, в котором вертолёт перевозит туристов, случаен. Найдите вероятность того, что турист П. полетит первым рейсом вертолёта.",
+      "new": "В группе туристов 30 человек. Их вертолётом в несколько приёмов забрасывают в труднодоступный район по 6 человек за рейс. Порядок, в котором вертолёт перевозит туристов, случаен. Найдите вероятность того, что турист П. полетит первым рейсом вертолёта.",
+      "reason": "В PDF напечатано «забрасывают»; заявленная моделью опечатка отсутствует.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar37.pdf",
+        "reports/pilot_36_40/evidence/v37_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B4",
+      "field": "exams_id",
+      "old": 131,
+      "new": 22,
+      "reason": "Вычисление рейтинга по формуле и таблице — простейшая арифметическая задача.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar37.pdf",
+        "reports/pilot_36_40/evidence/v37_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B4",
+      "field": "topics_id",
+      "old": 19,
+      "new": 18,
+      "reason": "Дробный коэффициент цены; лист только натуральных чисел слишком узок.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar37.pdf",
+        "reports/pilot_36_40/evidence/v37_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B5",
+      "field": "topics_id",
+      "old": 68,
+      "new": "Рациональные уравнения",
+      "reason": "Уравнение с дробями без прикладного сюжета; лист 68 относится к моделям реальных ситуаций. Общего листа рациональных уравнений нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar37.pdf",
+        "reports/pilot_36_40/evidence/v37_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B7",
+      "field": "topics_id",
+      "old": 93,
+      "new": 91,
+      "reason": "В числителе удвоенный угол 94°, в знаменателе дополнительные 47°/43°; формулы двойного аргумента точнее листа произведение-в-сумму.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar37.pdf",
+        "reports/pilot_36_40/evidence/v37_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B11",
+      "field": "exams_id",
+      "old": 187,
+      "new": 186,
+      "reason": "Требуется объём целого параллелепипеда — частного случая призмы, а не пирамиды.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar37.pdf",
+        "reports/pilot_36_40/evidence/v37_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B11",
+      "field": "topics_id",
+      "old": 574,
+      "new": 584,
+      "reason": "Целый параллелепипед является призмой; прямоугольность для листа 583 не дана.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar37.pdf",
+        "reports/pilot_36_40/evidence/v37_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B12",
+      "field": "exams_id",
+      "old": 131,
+      "new": 124,
+      "reason": "По зависимости рейтинга определяется постоянный линейный коэффициент.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar37.pdf",
+        "reports/pilot_36_40/evidence/v37_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B13",
+      "field": "exams_id",
+      "old": 131,
+      "new": 29,
+      "reason": "Время повторных встреч стрелок — движение по окружности.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar37.pdf",
+        "reports/pilot_36_40/evidence/v37_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B13",
+      "field": "topics_id",
+      "old": 156,
+      "new": 15,
+      "reason": "Вопрос о времени движения и пятой встрече, не о величине угла между стрелками.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar37.pdf",
+        "reports/pilot_36_40/evidence/v37_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 432,
+      "new": "Системы показательных и логарифмических неравенств",
+      "reason": "Система содержит отдельное показательное и логарифмическое неравенство; точного смешанного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar37.pdf",
+        "reports/pilot_36_40/evidence/v37_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C5",
+      "field": "topics_id",
+      "old": 270,
+      "new": "Тригонометрические неравенства с параметром",
+      "reason": "Лист 270 — конкретный способ преобразования уравнений, здесь смешанное неравенство с параметром; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar37.pdf",
+        "reports/pilot_36_40/evidence/v37_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C6",
+      "field": "exams_id",
+      "old": 266,
+      "new": 268,
+      "reason": "Сюжет о парных перемещениях сорок, не карточки/доски.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar37.pdf",
+        "reports/pilot_36_40/evidence/v37_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C6",
+      "field": "topics_id",
+      "old": 19,
+      "new": "Инварианты в задачах о перемещениях",
+      "reason": "Ключевой предмет — сохранение величин при парных перелётах; точного листа инвариантов нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar37.pdf",
+        "reports/pilot_36_40/evidence/v37_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) нет; б) да; в) нет.",
+      "reason": "Пустой C6 исходной PNG дополнен ответом из совпадающей опубликованной задачи; собственное решение не генерировалось.",
+      "evidence": [
+        "https://math-ege.sdamgia.ru/problem?id=506067",
+        "Совпадают 6 сорок/ёлок, 10 м, парные противоположные перелёты и вопросы о семи и о круге. Дополнительное пояснение «в ряд» во внешнем источнике в условие не переносилось.",
+        "reports/pilot_36_40/published_sources.json"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}

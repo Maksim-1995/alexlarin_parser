@@ -231,6 +231,14 @@ def test_figure_raised_slightly_above_its_task_label(top):
     assert variant_export._owner(pymupdf.Rect(694, top, 815, 558), anchors, given, 2, 842) == "B11"
 
 
+def test_graph_raised_more_than_two_label_heights_belongs_to_next_task():
+    anchors = [{"source_label": "B7", "x": 28, "y": 364.245, "y1": 380.265},
+               {"source_label": "B8", "x": 28, "y": 431.745, "y1": 447.765}]
+    given = [{"source_label": a["source_label"], "page_numbers": [2]} for a in anchors]
+    assert variant_export._owner(pymupdf.Rect(187.85, 397.38, 419.57, 539.10),
+                                 anchors, given, 2, 842) == "B8"
+
+
 def test_vector_detection_excludes_table_grid_and_tall_radical_but_keeps_geometry():
     with pymupdf.open() as document:
         page = document.new_page(width=600, height=600)

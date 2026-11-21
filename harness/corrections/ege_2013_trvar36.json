@@ -1,0 +1,151 @@
+{
+  "version": 3,
+  "variant_key": "ege_2013_trvar36",
+  "source_url": "https://alexlarin.net/ege/2013/trvar36.html",
+  "pdf_sha256": "7e29747ec50c7cfdf2f27b7a0dec97b7529760fc4b9cb73aaa092db61a30782c",
+  "corrections": [
+    {
+      "source_label": "B4",
+      "field": "condition",
+      "old": "Автомобильный журнал определяет рейтинги автомобилей на основе показателей безопасности S, комфорта C, функциональности F, качества Q и дизайна D. Каждый отдельный показатель оценивается по 5-балльной шкале от 1 до 5. Рейтинг R вычисляется по формуле $R = \\frac{3S + C + F + 2Q + D}{40}$. В таблице даны оценки каждого показателя для трёх моделей автомобилей. Определите наивысший рейтинг представленных в таблице моделей автомобилей.",
+      "new": "Автомобильный журнал определяет рейтинги автомобилей на основе показателей безопасности S, комфорта C, функциональности F, качества Q и дизайна D. Каждый отдельный показатель оценивается по 5-балльной шкале от 1 до 5. Рейтинг R вычисляется по формуле $R = \\frac{3S + C + F + 2Q + D}{40}$. В таблице даны оценки каждого показателя для трёх моделей автомобилей. Определите наивысший рейтинг представленных в таблице моделей автомобилей.\n<table><tr><th>Модель автомобиля</th><th>Безопасность</th><th>Комфорт</th><th>Функциональность</th><th>Качество</th><th>Дизайн</th></tr><tr><td>А</td><td>5</td><td>1</td><td>2</td><td>4</td><td>4</td></tr><tr><td>Б</td><td>1</td><td>1</td><td>4</td><td>2</td><td>3</td></tr><tr><td>В</td><td>3</td><td>2</td><td>3</td><td>2</td><td>3</td></tr></table>",
+      "reason": "Восстановлена полностью пропущенная OCR таблица с тремя моделями и всеми 15 оценками по странице 1.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar36.pdf",
+        "reports/pilot_36_40/evidence/v36_page1.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B6",
+      "field": "condition",
+      "old": "Сторона $AB$ треугольника $ABC$ равна 1. Противолежащий ей угол $C$ равен $30^0$. Найдите радиус окружности, описанной около этого треугольника.",
+      "new": "Сторона $AB$ треугольника $ABC$ равна 1. Противолежащий ей угол $C$ равен $30^\\circ$. Найдите радиус окружности, описанной около этого треугольника.",
+      "reason": "Градусы оформлены как градусы, не нулевая степень.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar36.pdf",
+        "reports/pilot_36_40/evidence/v36_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B12",
+      "field": "condition",
+      "old": "При температуре $0^0$ C рельс имеет длину $l_0 = 15$ м. При возрастании температуры происходит тепловое расширение рельса, и его длина, выраженная в метрах, меняется по закону $l(t^0) = l_0(1 + \\alpha t^0)$, где $\\alpha = 1,2\\cdot 10^{-5} (^0C)^{-1}$ — коэффициент теплового расширения, $t^0$ — температура (в градусах Цельсия). При какой температуре рельс удлинится на 4,5 мм? Ответ выразите в градусах Цельсия.",
+      "new": "При температуре $0^\\circ$ C рельс имеет длину $l_0 = 15$ м. При возрастании температуры происходит тепловое расширение рельса, и его длина, выраженная в метрах, меняется по закону $l(t^\\circ) = l_0(1 + \\alpha t^\\circ)$, где $\\alpha = 1,2\\cdot 10^{-5} (^\\circC)^{-1}$ — коэффициент теплового расширения, $t^\\circ$ — температура (в градусах Цельсия). При какой температуре рельс удлинится на 4,5 мм? Ответ выразите в градусах Цельсия.",
+      "reason": "Обозначения температуры и единиц Цельсия переданы знаком градуса.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar36.pdf",
+        "reports/pilot_36_40/evidence/v36_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C3",
+      "field": "condition",
+      "old": "Решите систему неравенств:\n$\\begin{cases}\\dfrac{\\sqrt{x^2\\cdot(10-x^2)}}{x}\\le 2x+5\\\\\\sqrt{\\log_9\\left(3x^2-4x+2\\right)+1}>\\log_3\\left(3x^2-4x+2\\right)\\end{cases}$",
+      "new": "Решите систему неравенств:\n$\\begin{cases}\\dfrac{\\sqrt{x^2\\cdot(10-x^2)}}{x}\\le 2x+5\\\\\\sqrt{\\log_9\\left(3x^2-4x+2\\right)}+1>\\log_3\\left(3x^2-4x+2\\right)\\end{cases}$",
+      "reason": "По PDF +1 находится за корнем: исправлена область радикала.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar36.pdf",
+        "reports/pilot_36_40/evidence/v36_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B4",
+      "field": "topics_id",
+      "old": 19,
+      "new": 18,
+      "reason": "Рейтинг и коэффициенты дробные, лист натуральных чисел 19 не соответствует вычислениям.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar36.pdf",
+        "reports/pilot_36_40/evidence/v36_page1.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B8",
+      "field": "topics_id",
+      "old": 108,
+      "new": "Геометрический смысл производной по графику функции",
+      "reason": "Сравнивается наклон графика в четырёх точках, а не ищутся экстремумы. Лист 109 ограничен уравнениями касательной/нормали; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar36.pdf",
+        "reports/pilot_36_40/evidence/v36_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B11",
+      "field": "exams_id",
+      "old": 186,
+      "new": 187,
+      "reason": "Четыре вершины ABC,A1 образуют треугольную пирамиду внутри призмы.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar36.pdf",
+        "reports/pilot_36_40/evidence/v36_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B11",
+      "field": "topics_id",
+      "old": 584,
+      "new": 574,
+      "reason": "Требуется объём пирамиды, а не всей призмы листа 584.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar36.pdf",
+        "reports/pilot_36_40/evidence/v36_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 444,
+      "new": "Системы иррациональных и логарифмических неравенств",
+      "reason": "Система сочетает радикалы и логарифмы; точного смешанного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar36.pdf",
+        "reports/pilot_36_40/evidence/v36_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C6",
+      "field": "topics_id",
+      "old": 550,
+      "new": "Комбинаторные задачи с неравенством треугольника",
+      "reason": "Нужны ограничения на возможные треугольники, не только правила суммы и произведения; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar36.pdf",
+        "reports/pilot_36_40/evidence/v36_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) нет; б) да; в) 1.",
+      "reason": "Пустой C6 исходной PNG дополнен ответом из совпадающей опубликованной задачи; собственное решение не генерировалось.",
+      "evidence": [
+        "https://math-ege.sdamgia.ru/problem?id=506061",
+        "Совпадают 8 отрезков, натуральные длины не более 20, вопросы 60/55 и запрет трёх равных.",
+        "reports/pilot_36_40/published_sources.json"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}

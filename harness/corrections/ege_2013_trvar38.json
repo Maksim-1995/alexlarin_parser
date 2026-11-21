@@ -1,0 +1,229 @@
+{
+  "version": 4,
+  "variant_key": "ege_2013_trvar38",
+  "source_url": "https://alexlarin.net/ege/2013/trvar38.html",
+  "pdf_sha256": "501bc8ce03349c5fc3f8bbe85f55da1b40a6b975683f0e21790caad6e521fa97",
+  "corrections": [
+    {
+      "source_label": "C1",
+      "field": "condition",
+      "old": "а) Решите уравнение $\\sqrt{2}\\sin x-\\sqrt{2}+\\cos x=0$\n\nб) Найдите все корни на промежутке $\\left[\\frac{\\pi}{2};\\pi\\right]$",
+      "new": "а) Решите уравнение $\\sqrt{2}\\sin x-\\sqrt{2+\\cos x}=0$\n\nб) Найдите все корни на промежутке $\\left[\\frac{\\pi}{2};\\pi\\right]$",
+      "reason": "Второй корень охватывает 2+cos x целиком по PDF.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar38.pdf",
+        "reports/pilot_36_40/evidence/v38_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C3",
+      "field": "condition",
+      "old": "Решите систему неравенств:\n$\\begin{cases}\\frac{1}{5x-12}+\\frac{2x^2-6x+1}{x-3}\\ge 2x\\\\\\log_{x-1}(2x+7)\\cdot\\log_{x+1}\\frac{2x^2+9x+7}{(x+1)^4}\\le -2\\end{cases}$",
+      "new": "Решите систему неравенств:\n$\\begin{cases}\\frac{1}{5x-12}+\\frac{2x^2-6x+1}{x-3}\\ge 2x\\\\\\log_{x+1}(2x+7)\\cdot\\log_{x+1}\\frac{2x^2+9x+7}{(x+1)^4}\\le -2\\end{cases}$",
+      "reason": "У первого логарифма основание x+1 по PDF, не x−1.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar38.pdf",
+        "reports/pilot_36_40/evidence/v38_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C3",
+      "field": "answer",
+      "old": "$\\left[\\sqrt{6};\\frac{5}{2}\\right)\\cup(3;\\infty)$",
+      "new": "$\\left[\\sqrt{6};\\frac{5}{2}\\right]\\cup(3;\\infty)$",
+      "reason": "По опубликованной PNG правая граница первого интервала включена.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar38.pdf",
+        "reports/pilot_36_40/evidence/v38_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "published-source-transcription"
+    },
+    {
+      "source_label": "B1",
+      "field": "topics_id",
+      "old": 19,
+      "new": 18,
+      "reason": "Обменный курс 4,10 рубля и округление покупки — вычисления с дробями.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar38.pdf",
+        "reports/pilot_36_40/evidence/v38_page1.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B4",
+      "field": "exams_id",
+      "old": 26,
+      "new": 25,
+      "reason": "Скидка в процентах без округления результата, лист 26 излишне требует округление.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar38.pdf",
+        "reports/pilot_36_40/evidence/v38_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B5",
+      "field": "topics_id",
+      "old": 24,
+      "new": "Степенные уравнения с натуральным показателем",
+      "reason": "Степень пятая, а лист 24 посвящён линейным уравнениям; точного листа степенных уравнений такого вида нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar38.pdf",
+        "reports/pilot_36_40/evidence/v38_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B9",
+      "field": "topics_id",
+      "old": 591,
+      "new": "Угол между пересекающимися прямыми в прямоугольном многограннике",
+      "reason": "C3D3B3 — плоский угол двух рёбер/диагонали в одной грани; не двугранный угол листа 591. Точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar38.pdf",
+        "reports/pilot_36_40/evidence/v38_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B11",
+      "field": "topics_id",
+      "old": 659,
+      "new": "Площадь поверхности составного прямоугольного многогранника",
+      "reason": "Задача о всей поверхности тела, не сечении многогранника ветки листа 659; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar38.pdf",
+        "reports/pilot_36_40/evidence/v38_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B13",
+      "field": "topics_id",
+      "old": 12,
+      "new": "Задачи на движение: сравнение времени прохождения одного пути",
+      "reason": "Два поезда проходят один путь за разное время; сближения/удаления листа 12 нет. Точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar38.pdf",
+        "reports/pilot_36_40/evidence/v38_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "B14",
+      "field": "topics_id",
+      "old": 110,
+      "new": 108,
+      "reason": "Требуется точка максимума, не наибольшее значение функции на отрезке.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar38.pdf",
+        "reports/pilot_36_40/evidence/v38_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C1",
+      "field": "exams_id",
+      "old": 204,
+      "new": 205,
+      "reason": "После восстановления радикала видна смесь тригонометрии и иррациональности.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar38.pdf",
+        "reports/pilot_36_40/evidence/v38_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C1",
+      "field": "topics_id",
+      "old": 266,
+      "new": 260,
+      "reason": "Смешанное тригонометрическое уравнение с радикалом, не линейная комбинация sin/cos листа 266.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar38.pdf",
+        "reports/pilot_36_40/evidence/v38_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 432,
+      "new": "Системы рациональных и логарифмических неравенств",
+      "reason": "Система содержит рациональное и логарифмическое неравенства; точного смешанного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar38.pdf",
+        "reports/pilot_36_40/evidence/v38_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C5",
+      "field": "topics_id",
+      "old": 261,
+      "new": "Алгебраические уравнения с параметром: число действительных корней",
+      "reason": "Тригонометрии в условии нет; точного алгебраического листа параметров нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar38.pdf",
+        "reports/pilot_36_40/evidence/v38_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C6",
+      "field": "exams_id",
+      "old": 265,
+      "new": 268,
+      "reason": "Сюжетная комбинаторная задача о перевозке глыб.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar38.pdf",
+        "reports/pilot_36_40/evidence/v38_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C6",
+      "field": "topics_id",
+      "old": 637,
+      "new": "Комбинаторные задачи о загрузке транспорта",
+      "reason": "Минимальное число грузовиков и дискретные ограничения масс, не просто свойства делимости листа 637; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar38.pdf",
+        "reports/pilot_36_40/evidence/v38_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-21"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) да; б) нет; в) 39.",
+      "reason": "Пустой C6 исходной PNG дополнен ответом из совпадающей опубликованной задачи; собственное решение не генерировалось.",
+      "evidence": [
+        "https://math-ege.sdamgia.ru/problem?id=506073",
+        "Совпадают все количества 50/60/60, массы 800/1000/1500 кг, грузоподъёмность 5 т, вопросы 60/38/минимум.",
+        "reports/pilot_36_40/published_sources.json"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}
