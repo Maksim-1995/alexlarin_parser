@@ -17,7 +17,7 @@ def _column_starts(anchors, page_width):
 
 
 def _owner(rect, anchors, tasks, page_number, page_width):
-    center_x, center_y = (rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2
+    center_x = (rect.x0 + rect.x1) / 2
     starts = _column_starts(anchors, page_width)
     if not starts:
         # На странице может быть только продолжение условия.
@@ -30,7 +30,17 @@ def _owner(rect, anchors, tasks, page_number, page_width):
     left = starts[column]
     right = starts[column + 1] if column + 1 < len(starts) else page_width
     same_column = [item for item in anchors if left <= item["x"] < right]
-    above = [item for item in same_column if item["y"] <= center_y + 3]
+    # Высокий график может находиться сбоку сразу от нескольких условий.
+    # Его верх, с допуском в две высоты метки, указывает начало задачи;
+    # середина рисунка может уже оказаться рядом со следующей задачей.
+    tolerance = max([3, *(2 * (item.get("y1", item["y"] + 16) - item["y"]) for item in same_column)])
+    above = [item for item in same_column if item["y"] <= rect.y0 + tolerance]
+    # У последней задачи продолжение может занимать всю правую колонку:
+    # новых меток справа нет, поэтому starts содержит только левую колонку.
+    # Рисунок над первым левым условием относится к последней левой задаче.
+    if (not above and rect.x0 >= page_width / 2
+            and all(item["x"] < page_width / 2 for item in anchors)):
+        return max(anchors, key=lambda item: item["y"])["source_label"]
     if above:
         return max(above, key=lambda item: item["y"])["source_label"]
     # Продолжение задачи может начинаться с рисунка в соседней колонке

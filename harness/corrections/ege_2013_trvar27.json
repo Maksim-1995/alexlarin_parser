@@ -1,0 +1,150 @@
+{
+  "version": 4,
+  "variant_key": "ege_2013_trvar27",
+  "source_url": "https://alexlarin.net/ege/2013/trvar27.html",
+  "pdf_sha256": "f4e8c2e9128fd91c9faea10ca0878fe4369a9f3ccae009c4271a6d7be7c78aa9",
+  "corrections": [
+    {
+      "source_label": "B3",
+      "field": "condition",
+      "old": "Найдите сумму координат вектора $\\overline{AB}$.\n\n[ИЗОБРАЖЕНИЕ: график с точками $A(2;4)$ и $B(8;6)$]",
+      "new": "Найдите сумму координат вектора $\\overrightarrow{AB}$.",
+      "reason": "По PDF знак вектора — стрелка; добавленное OCR описание рисунка удалено, сам рисунок сохраняется отдельно.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar27.pdf",
+        "reports/pilot_26_35/evidence/v27_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B8",
+      "field": "condition",
+      "old": "На рисунке изображён график функции $y=f(x)$ и двенадцать точек на оси абсцисс: $x_1, x_2, ..., x_{12}$. В скольких из этих точек производная функции $f(x)$ отрицательна?\n\n[ИЗОБРАЖЕНИЕ: график функции с отмеченными точками $x_1$–$x_{12}$ на оси абсцисс]",
+      "new": "На рисунке изображён график функции $y=f(x)$ и двенадцать точек на оси абсцисс: $x_1, x_2, ..., x_{12}$. В скольких из этих точек производная функции $f(x)$ отрицательна?",
+      "reason": "Удалено добавленное OCR описание рисунка; исходный текст проверен по PDF.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar27.pdf",
+        "reports/pilot_26_35/evidence/v27_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C3",
+      "field": "answer",
+      "old": "$\\left(\\frac{1}{2};\\frac{1}{\\sqrt[3]{3}}\\right]\\cup(1;\\sqrt[3]{9}]$",
+      "new": "$\\left(\\frac{1}{2};\\frac{1}{\\sqrt[3]{3}}\\right]\\cup(1;\\sqrt[5]{9}]$",
+      "reason": "По опубликованной PNG верхняя граница — корень пятой степени из 9, не третьей.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar27.pdf",
+        "reports/pilot_26_35/evidence/v27_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "published-source-transcription"
+    },
+    {
+      "source_label": "B3",
+      "field": "topics_id",
+      "old": 525,
+      "new": 524,
+      "reason": "Требуются координаты одного вектора, а не сложение/вычитание листа 525.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar27.pdf",
+        "reports/pilot_26_35/evidence/v27_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B9",
+      "field": "topics_id",
+      "old": 659,
+      "new": "Площадь поверхности куба",
+      "reason": "Лист 659 находится внутри ветки сечений многогранников; задача о поверхности целого куба, точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar27.pdf",
+        "reports/pilot_26_35/evidence/v27_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B10",
+      "field": "exams_id",
+      "old": 162,
+      "new": 193,
+      "reason": "Вычисляется вероятность дополнения события, не число равновозможных исходов.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar27.pdf",
+        "reports/pilot_26_35/evidence/v27_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B10",
+      "field": "topics_id",
+      "old": 561,
+      "new": 682,
+      "reason": "Используется дополнение события; лист 561 о классическом определении излишне узкий.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar27.pdf",
+        "reports/pilot_26_35/evidence/v27_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C1",
+      "field": "topics_id",
+      "old": 190,
+      "new": 260,
+      "reason": "Условие смешивает логарифмы с тригонометрией, не логарифмы с показательными выражениями листа 190.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar27.pdf",
+        "reports/pilot_26_35/evidence/v27_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C6",
+      "field": "exams_id",
+      "old": 266,
+      "new": 268,
+      "reason": "Сюжетная задача с инвариантами цветов шаров, не карточки/доски.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar27.pdf",
+        "reports/pilot_26_35/evidence/v27_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 432,
+      "new": "Системы показательных и логарифмических неравенств",
+      "reason": "Смешанная система содержит обе функции; лист 432 ограничен логарифмическими системами, точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar27.pdf",
+        "reports/pilot_26_35/evidence/v27_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) красный; б) зелёный; в) нельзя.",
+      "reason": "Пустая исходная PNG дополнена совпадающей публикацией; собственное решение не генерировалось.",
+      "evidence": [
+        "https://math-ege.sdamgia.ru/problem?id=506007",
+        "reports/pilot_26_35/published_sources.json"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}

@@ -1,0 +1,98 @@
+{
+  "version": 3,
+  "variant_key": "ege_2013_trvar34",
+  "source_url": "https://alexlarin.net/ege/2013/trvar34.html",
+  "pdf_sha256": "e231d1533f669d3d61b24979dc4a474716952f8ced3f88a04402506d31d01344",
+  "corrections": [
+    {
+      "source_label": "B2",
+      "field": "topics_id",
+      "old": 19,
+      "new": "Чтение графиков и диаграмм",
+      "reason": "Чтение графика осадков, а не арифметическая текстовая задача 19; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar34.pdf",
+        "reports/pilot_26_35/evidence/v34_page1.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B11",
+      "field": "topics_id",
+      "old": 585,
+      "new": "Объём цилиндра и его частей",
+      "reason": "Требуется объём части цилиндра, а лист 585 о конусе; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar34.pdf",
+        "reports/pilot_26_35/evidence/v34_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B13",
+      "field": "topics_id",
+      "old": 17,
+      "new": "Сравнение скоростей и времени прохождения одного пути",
+      "reason": "Движение двух поездов не является погоней листа 17; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar34.pdf",
+        "reports/pilot_26_35/evidence/v34_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C6",
+      "field": "exams_id",
+      "old": 266,
+      "new": 268,
+      "reason": "Сюжетная задача о распределении школьников по классам.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar34.pdf",
+        "reports/pilot_26_35/evidence/v34_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C6",
+      "field": "topics_id",
+      "old": 550,
+      "new": "Принцип Дирихле в задачах о распределении по классам",
+      "reason": "Требуется принцип Дирихле, а не правила суммы/произведения листа 550; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar34.pdf",
+        "reports/pilot_26_35/evidence/v34_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 432,
+      "new": "Системы показательных и логарифмических неравенств",
+      "reason": "Смешанная система содержит обе функции; лист 432 ограничен логарифмическими системами, точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar34.pdf",
+        "reports/pilot_26_35/evidence/v34_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) обязательно; б) нет.",
+      "reason": "Пустая исходная PNG дополнена совпадающей публикацией; собственное решение не генерировалось.",
+      "evidence": [
+        "https://ege.sdamgia.ru/problem?id=506049",
+        "reports/pilot_26_35/published_sources.json"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}

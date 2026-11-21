@@ -1,0 +1,176 @@
+{
+  "version": 3,
+  "variant_key": "ege_2013_trvar35",
+  "source_url": "https://alexlarin.net/ege/2013/trvar35.html",
+  "pdf_sha256": "bb77c67c26a5b1c3bd089b9993e28bc182af41c6a6e6055d6e44255be4e99dac",
+  "corrections": [
+    {
+      "source_label": "B4",
+      "field": "condition",
+      "old": "Клиент хочет арендовать автомобиль на двое суток для поездки протяженностью 2100 км. В таблице приведены характеристики трех автомобилей и стоимость их аренды. Помимо аренды клиент обязан оплатить топливо для автомобиля на всю поездку. Какую сумму в рублях заплатит клиент за аренду и топливо, если выберет самый дешевый вариант?\n\n\\begin{tabular}{|c|c|c|c|}\n\\hline\nАвтомобиль & Топливо & Расход топлива (л на 100 км) & Арендная плата (руб. за 1 сутки) \\\\\n\\hline\nА & Дизельное & 7 & 3700 \\\\\n\\hline\nБ & Бензин & 10 & 3200 \\\\\n\\hline\nВ & Газ & 14 & 3200 \\\\\n\\hline\n\\end{tabular}\n\nЦена дизельного топлива — 19 рублей за литр, бензина — 22 рубля за литр, газа — 14 рублей за литр.",
+      "new": "Клиент хочет арендовать автомобиль на двое суток для поездки протяженностью 2100 км. В таблице приведены характеристики трех автомобилей и стоимость их аренды. Помимо аренды клиент обязан оплатить топливо для автомобиля на всю поездку. Какую сумму в рублях заплатит клиент за аренду и топливо, если выберет самый дешевый вариант?\n\n<table><tr><th>Автомобиль</th><th>Топливо</th><th>Расход топлива (л на 100 км)</th><th>Арендная плата (руб. за 1 сутки)</th></tr><tr><td>А</td><td>Дизельное</td><td>7</td><td>3700</td></tr><tr><td>Б</td><td>Бензин</td><td>10</td><td>3200</td></tr><tr><td>В</td><td>Газ</td><td>14</td><td>3200</td></tr></table>\n\nЦена дизельного топлива — 19 рублей за литр, бензина — 22 рубля за литр, газа — 14 рублей за литр.",
+      "reason": "Таблица LaTeX вне формулы заменена поддерживаемым HTML; все исходные ячейки сохранены.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar35.pdf",
+        "reports/pilot_26_35/evidence/v35_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C3",
+      "field": "condition",
+      "old": "Решите систему неравенств:\n$\\begin{cases}\\log_{x-1}(x^2+x-6)\\ge 4\\\\\\sqrt{-25x^2+15x-2}\\cdot(8x^2-6x+1)\\ge 0\\end{cases}$",
+      "new": "Решите систему неравенств:\n$\\begin{cases}\\log_{x+1}(x^2+x-6)\\ge 4\\\\\\sqrt{-25x^2+15x-2}\\cdot(8x^2-6x+1)\\ge 0\\end{cases}$",
+      "reason": "По PDF в основании логарифма x+1, а не x−1.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar35.pdf",
+        "reports/pilot_26_35/evidence/v35_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C5",
+      "field": "condition",
+      "old": "Найдите все значения $b$, при которых уравнение\n$3\\cdot\\sqrt[3]{x+2}-16b^2\\cdot\\sqrt[3]{32x+32}=\\sqrt[6]{x^2+3x+2}$\nимеет единственное решение.",
+      "new": "Найдите все значения $b$, при которых уравнение\n$3\\cdot\\sqrt[5]{x+2}-16b^2\\cdot\\sqrt[5]{32x+32}=\\sqrt[10]{x^2+3x+2}$\nимеет единственное решение.",
+      "reason": "По PDF оба левых корня пятой степени, правый — десятой, не 3/3/6.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar35.pdf",
+        "reports/pilot_26_35/evidence/v35_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B6",
+      "field": "topics_id",
+      "old": 514,
+      "new": "Равнобедренная трапеция и радиус описанной окружности",
+      "reason": "Требуется высота по основаниям и радиусу, не площадь листа 514; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar35.pdf",
+        "reports/pilot_26_35/evidence/v35_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B8",
+      "field": "topics_id",
+      "old": 102,
+      "new": "Физический смысл производной: скорость по закону движения",
+      "reason": "Задача о скорости, а не только техника степенной производной; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar35.pdf",
+        "reports/pilot_26_35/evidence/v35_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B11",
+      "field": "topics_id",
+      "old": 584,
+      "new": "Объём составного прямоугольного многогранника",
+      "reason": "Требуется разность объёмов прямоугольных блоков, не объём целой призмы; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar35.pdf",
+        "reports/pilot_26_35/evidence/v35_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B12",
+      "field": "topics_id",
+      "old": 440,
+      "new": 476,
+      "reason": "Прикладное иррациональное ограничение скорости, не только уравнение листа 440.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar35.pdf",
+        "reports/pilot_26_35/evidence/v35_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C2",
+      "field": "topics_id",
+      "old": 579,
+      "new": "Сечения цилиндра наклонной плоскостью",
+      "reason": "Требуется площадь наклонного сечения, не поверхности цилиндра листа 579; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar35.pdf",
+        "reports/pilot_26_35/evidence/v35_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 444,
+      "new": "Системы логарифмических и иррациональных неравенств",
+      "reason": "Смешанная система, лист 444 ограничен иррациональными системами; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar35.pdf",
+        "reports/pilot_26_35/evidence/v35_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C4",
+      "field": "topics_id",
+      "old": 633,
+      "new": "Вписанный и описанный четырёхугольник и радиусы вписанных окружностей",
+      "reason": "Требуется площадь через угол и два радиуса, не диагонали теоремы Птолемея; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar35.pdf",
+        "reports/pilot_26_35/evidence/v35_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C5",
+      "field": "topics_id",
+      "old": 261,
+      "new": "Иррациональные уравнения с параметром",
+      "reason": "Условие не содержит тригонометрии, лист 261 неверен; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar35.pdf",
+        "reports/pilot_26_35/evidence/v35_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C6",
+      "field": "exams_id",
+      "old": 265,
+      "new": 268,
+      "reason": "Сюжетная задача об отрядах и остатках монет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar35.pdf",
+        "reports/pilot_26_35/evidence/v35_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) 31; б) 30.",
+      "reason": "Пустая исходная PNG дополнена совпадающей публикацией; собственное решение не генерировалось.",
+      "evidence": [
+        "https://math-ege.sdamgia.ru/problem?id=506055",
+        "reports/pilot_26_35/published_sources.json"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}

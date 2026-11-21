@@ -1,0 +1,137 @@
+{
+  "version": 3,
+  "variant_key": "ege_2013_trvar32",
+  "source_url": "https://alexlarin.net/ege/2013/trvar32.html",
+  "pdf_sha256": "aaac585f084d63ae92cb193937aa18f0c1089c45f29b0e4eb719a895e843987e",
+  "corrections": [
+    {
+      "source_label": "C3",
+      "field": "condition",
+      "old": "Решите систему неравенств\n$\\begin{cases} 15 \\cdot \\frac{4^{x-2}}{4^x - 3^x} > 1 + \\left(\\frac{3}{4}\\right)^x \\\\ \\log_{x\\sqrt{3}}\\left(3x^6 + 2x^2 - 6\\right) > 6 \\end{cases}$",
+      "new": "Решите систему неравенств\n$\\begin{cases} 15 \\cdot \\frac{4^{x-2}}{4^x - 3^x} > 1 + \\left(\\frac{3}{4}\\right)^x \\\\ \\log_{x\\sqrt[6]{3}}\\left(3x^6 + 2x^2 - 6\\right) > 6 \\end{cases}$",
+      "reason": "По увеличенной странице основание содержит шестой корень из 3.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar32.pdf",
+        "reports/pilot_26_35/evidence/v32_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B4",
+      "field": "exams_id",
+      "old": 92,
+      "new": 22,
+      "reason": "Простой расчёт закупки и доставки, не финансовая оптимизация C5.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar32.pdf",
+        "reports/pilot_26_35/evidence/v32_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B4",
+      "field": "topics_id",
+      "old": 474,
+      "new": 19,
+      "reason": "Прямое арифметическое сравнение трёх покупок; задача не о процентах.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar32.pdf",
+        "reports/pilot_26_35/evidence/v32_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B7",
+      "field": "topics_id",
+      "old": 121,
+      "new": "Преобразование степенных выражений с переменным показателем",
+      "reason": "Показатель дробный/переменный, не натуральный листа 121; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar32.pdf",
+        "reports/pilot_26_35/evidence/v32_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B9",
+      "field": "exams_id",
+      "old": 218,
+      "new": 181,
+      "reason": "Прямые BA₁ и A₁C₁ пересекаются в A₁, не скрещиваются.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar32.pdf",
+        "reports/pilot_26_35/evidence/v32_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B9",
+      "field": "topics_id",
+      "old": 565,
+      "new": "Угол между пересекающимися прямыми в кубе",
+      "reason": "Лист 565 посвящён скрещивающимся прямым; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar32.pdf",
+        "reports/pilot_26_35/evidence/v32_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B11",
+      "field": "topics_id",
+      "old": 579,
+      "new": "Объём цилиндра и его частей",
+      "reason": "Требуется объём полого цилиндра, не площадь поверхности листа 579; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar32.pdf",
+        "reports/pilot_26_35/evidence/v32_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C5",
+      "field": "topics_id",
+      "old": 270,
+      "new": 261,
+      "reason": "Условие действительно содержит тригонометрическое уравнение с параметром, а не преобразование произведения в сумму.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar32.pdf",
+        "reports/pilot_26_35/evidence/v32_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 432,
+      "new": "Системы показательных и логарифмических неравенств",
+      "reason": "Смешанная система содержит обе функции; лист 432 ограничен логарифмическими системами, точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar32.pdf",
+        "reports/pilot_26_35/evidence/v32_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) может; б) не может.",
+      "reason": "Пустая исходная PNG дополнена совпадающей публикацией; собственное решение не генерировалось.",
+      "evidence": [
+        "https://mirolimp.ru/tasks/216033",
+        "reports/pilot_26_35/published_sources.json"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}

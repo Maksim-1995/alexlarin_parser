@@ -194,6 +194,27 @@ def test_split_label_across_pdf_blocks_uses_visual_adjacency_and_ignores_formula
     assert positions[1]["original_label"] == "B8"
 
 
+@pytest.mark.parametrize("rotation", [0, 90])
+def test_column_of_split_labels_is_found_beside_column_of_whole_labels(rotation):
+    """PDF32: все метки левой колонки разделены, справа есть целые метки."""
+    from types import SimpleNamespace
+    visible = [
+        (30, 40, 39, 56, "В", 1, 0, 0),
+        (39, 40, 47, 56, "3", 2, 0, 0),
+        (30, 180, 39, 196, "В", 3, 1, 0),
+        (39, 180, 47, 196, "4", 4, 0, 0),
+        (440, 40, 458, 56, "B7", 5, 0, 0),
+        (65, 220, 72, 230, "В", 6, 0, 0),
+        (73, 220, 98, 230, "2008", 6, 0, 1),
+        (65, 250, 72, 260, "В", 7, 0, 0),
+        (73, 250, 98, 260, "2009", 7, 0, 1),
+    ]
+    matrix = pymupdf.Matrix(rotation)
+    words = [(*tuple(pymupdf.Rect(*w[:4]) * ~matrix), *w[4:]) for w in visible]
+    page = SimpleNamespace(get_text=lambda kind: words, rotation_matrix=matrix)
+    assert [p["source_label"] for p in task_positions(page)] == ["B3", "B4", "B7"]
+
+
 def test_split_cyrillic_letter_in_sentence_with_year_is_not_task_label():
     """В PDF7 «В 2008 году» начинается в body-indent рядом с меткой B13."""
     words = [

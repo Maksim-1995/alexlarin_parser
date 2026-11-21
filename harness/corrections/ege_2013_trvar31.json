@@ -1,0 +1,110 @@
+{
+  "version": 4,
+  "variant_key": "ege_2013_trvar31",
+  "source_url": "https://alexlarin.net/ege/2013/trvar31.html",
+  "pdf_sha256": "878c9f45feaa69daa67813994c391741171ec58ec489690530b33879d83e3f7d",
+  "corrections": [
+    {
+      "source_label": "C1",
+      "field": "condition",
+      "old": "а) Решите уравнение $\\operatorname{tg}\\left(x+\\frac{\\pi}{4}\\right)+1=2(\\sqrt{2}+1)\\operatorname{ctg}x$\\nб) Найдите все корни на промежутке $\\left[\\frac{\\pi}{4};\\frac{7\\pi}{4}\\right]$",
+      "new": "а) Решите уравнение $\\operatorname{tg}\\left(x+\\frac{\\pi}{4}\\right)+1=2(\\sqrt{2}+1)\\operatorname{ctg}x$\nб) Найдите все корни на промежутке $\\left[\\frac{\\pi}{4};\\frac{7\\pi}{4}\\right]$",
+      "reason": "Разделитель текста перед подпунктом б) оформлен реальным переносом по PDF.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar31.pdf",
+        "reports/pilot_26_35/evidence/v31_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C3",
+      "field": "answer",
+      "old": "$\\log_4\\left(\\sqrt{46}-2\\right)-1;\\infty)$",
+      "new": "$\\left[\\log_4(\\sqrt{46}-2)-1;\\infty\\right)$",
+      "reason": "По PNG восстановлена утраченная левая квадратная скобка интервала.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar31.png",
+        "reports/pilot_26_35/evidence/v31_answers_large.png"
+      ],
+      "method": "published-source-transcription"
+    },
+    {
+      "source_label": "B4",
+      "field": "topics_id",
+      "old": 32,
+      "new": 18,
+      "reason": "Задача о сравнении обменных цен с десятичными числами; проценты листа 32 отсутствуют.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar31.pdf",
+        "reports/pilot_26_35/evidence/v31_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B11",
+      "field": "topics_id",
+      "old": 583,
+      "new": 574,
+      "reason": "Четыре вершины образуют пирамиду, не объём целого параллелепипеда.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar31.pdf",
+        "reports/pilot_26_35/evidence/v31_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B11",
+      "field": "exams_id",
+      "old": 182,
+      "new": 187,
+      "reason": "Объём пирамиды с четырьмя указанными вершинами.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar31.pdf",
+        "reports/pilot_26_35/evidence/v31_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C5",
+      "field": "topics_id",
+      "old": 261,
+      "new": "Иррациональные уравнения с параметром: невозможные корни",
+      "reason": "Тригонометрии нет, требуется исследовать радикалы и область возможных корней; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar31.pdf",
+        "reports/pilot_26_35/evidence/v31_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 432,
+      "new": "Системы показательных и логарифмических неравенств",
+      "reason": "Смешанная система содержит обе функции; лист 432 ограничен логарифмическими системами, точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar31.pdf",
+        "reports/pilot_26_35/evidence/v31_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) Могло. б) Да, изменится: такая ситуация невозможна. в) Да, изменится: такая ситуация невозможна.",
+      "reason": "Пустая исходная PNG дополнена совпадающей публикацией; собственное решение не генерировалось.",
+      "evidence": [
+        "https://problems.ru/view_problem_details_new.php?id=98582",
+        "reports/pilot_26_35/published_sources.json"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}

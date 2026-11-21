@@ -1,0 +1,124 @@
+{
+  "version": 3,
+  "variant_key": "ege_2013_trvar28",
+  "source_url": "https://alexlarin.net/ege/2013/trvar28.html",
+  "pdf_sha256": "d2c06b8cc465117ea38dfd16bdcd69e1daec8c2a91df1a787af2b21f49dc5a63",
+  "corrections": [
+    {
+      "source_label": "B4",
+      "field": "topics_id",
+      "old": 12,
+      "new": "Сравнение времени движения по разным маршрутам",
+      "reason": "Нет сближения или удаления листа 12; прямое сравнение длительности трёх маршрутов, точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar28.pdf",
+        "reports/pilot_26_35/evidence/v28_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B5",
+      "field": "topics_id",
+      "old": 190,
+      "new": "Логарифмические уравнения, сводимые к квадратным",
+      "reason": "Квадратное уравнение относительно логарифма, а не смесь с показательной функцией листа 190; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar28.pdf",
+        "reports/pilot_26_35/evidence/v28_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B6",
+      "field": "topics_id",
+      "old": 189,
+      "new": 522,
+      "reason": "Геометрическая задача о прямоугольном треугольнике, не логарифмическое уравнение листа 189.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar28.pdf",
+        "reports/pilot_26_35/evidence/v28_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B10",
+      "field": "topics_id",
+      "old": 561,
+      "new": 682,
+      "reason": "Разность вложенных событий; не классическое определение листа 561.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar28.pdf",
+        "reports/pilot_26_35/evidence/v28_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C5",
+      "field": "topics_id",
+      "old": 270,
+      "new": "Логарифмические неравенства с параметром",
+      "reason": "В условии нет тригонометрии, лист 270 неверен; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar28.pdf",
+        "reports/pilot_26_35/evidence/v28_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C6",
+      "field": "topics_id",
+      "old": 278,
+      "new": "Комбинаторные задачи о разбиении кучек",
+      "reason": "Тригонометрический лист 278 неверен, задача о процессе разбиения натуральных количеств; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar28.pdf",
+        "reports/pilot_26_35/evidence/v28_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C6",
+      "field": "exams_id",
+      "old": 266,
+      "new": 268,
+      "reason": "Сюжетная задача о кучках камешков, не числовые карточки/доски.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar28.pdf",
+        "reports/pilot_26_35/evidence/v28_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 432,
+      "new": "Системы показательных и логарифмических неравенств",
+      "reason": "Смешанная система содержит обе функции; лист 432 ограничен логарифмическими системами, точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar28.pdf",
+        "reports/pilot_26_35/evidence/v28_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) да; б) да; в) да, мог.",
+      "reason": "Пустая исходная PNG дополнена совпадающей публикацией; собственное решение не генерировалось.",
+      "evidence": [
+        "https://math-ege.sdamgia.ru/problem?id=506013",
+        "reports/pilot_26_35/published_sources.json"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}

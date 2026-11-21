@@ -1,0 +1,125 @@
+{
+  "version": 3,
+  "variant_key": "ege_2013_trvar29",
+  "source_url": "https://alexlarin.net/ege/2013/trvar29.html",
+  "pdf_sha256": "7a478459ee90d37136647cdc434cfc855f3534501e91eb0d0077bcf1a3649e9f",
+  "corrections": [
+    {
+      "source_label": "B10",
+      "field": "condition",
+      "old": "Чтобы поступить в институт на специальность «Лингвистика», абитуриент должен набрать на ЕГЭ не менее 70 баллов по каждому из трёх предметов — математика, русский язык и иностранный язык. Чтобы поступить на на специальность «Коммерция», нужно набрать не менее 70 баллов по каждому из трёх предметов — математика, русский язык и обществознание.\nВероятность того, что абитуриент З. получит не менее 70 баллов по математике, равна 0,6, по русскому языку — 0,8, по иностранному языку — 0,7 и по обществознанию — 0,5. Найдите вероятность того, что З. сможет поступить хотя бы на одну из двух упомянутых специальностей.",
+      "new": "Чтобы поступить в институт на специальность «Лингвистика», абитуриент должен набрать на ЕГЭ не менее 70 баллов по каждому из трёх предметов — математика, русский язык и иностранный язык. Чтобы поступить на специальность «Коммерция», нужно набрать не менее 70 баллов по каждому из трёх предметов — математика, русский язык и обществознание. Вероятность того, что абитуриент З. получит не менее 70 баллов по математике, равна 0,6, по русскому языку — 0,8, по иностранному языку — 0,7 и по обществознанию — 0,5. Найдите вероятность того, что З. сможет поступить хотя бы на одну из двух упомянутых специальностей.",
+      "reason": "Удалён повтор «на на» OCR; текст сверён со страницей 2 PDF.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar29.pdf",
+        "reports/pilot_26_35/evidence/v29_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C1",
+      "field": "condition",
+      "old": "а) Решите уравнение $\\log_{(\\sin x)}\\left(\\cos^2 x+\\frac{1}{2}\\sin 2x+1\\right)=0$\\nб) Найдите все корни на промежутке $[-3;1]$",
+      "new": "а) Решите уравнение $\\log_{(-\\sin x)}\\left(\\cos^2 x+\\frac{1}{2}\\sin 2x+1\\right)=0$\nб) Найдите все корни на промежутке $[-3;1]$",
+      "reason": "Восстановлен минус в основании логарифма, буквальный разделитель текста заменён переносом по PDF.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar29.pdf",
+        "reports/pilot_26_35/evidence/v29_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C3",
+      "field": "condition",
+      "old": "Решите систему неравенств:\\n$\\begin{cases}\\frac{4^x+5}{2^x-11}\\ge -1\\\\\\log_3\\log_9\\left(x^2-4x+3\\right)\\le 0\\end{cases}$",
+      "new": "Решите систему неравенств:\n$\\begin{cases}\\frac{4^x+5}{2^x-11}\\ge -1\\\\\\log_3\\log_{\\frac{9}{16}}\\left(x^2-4x+3\\right)\\le 0\\end{cases}$",
+      "reason": "Восстановлено дробное основание вложенного логарифма 9/16 и перенос строки.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar29.pdf",
+        "reports/pilot_26_35/evidence/v29_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C6",
+      "field": "condition",
+      "old": "На окружности расставлены 999 чисел, каждое равно 1 или -1, причем не все числа одинаковые. Возьмем все произведения по 10 подряд стоящих чисел и сложим их.\\nа) Какая наименьшая сумма может получиться?\\nб) А какая наибольшая?",
+      "new": "На окружности расставлены 999 чисел, каждое равно 1 или -1, причем не все числа одинаковые. Возьмем все произведения по 10 подряд стоящих чисел и сложим их.\nа) Какая наименьшая сумма может получиться?\nб) А какая наибольшая?",
+      "reason": "Буквальные разделители текста OCR оформлены переносами по PDF.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar29.pdf",
+        "reports/pilot_26_35/evidence/v29_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B6",
+      "field": "topics_id",
+      "old": 514,
+      "new": "Равнобедренная трапеция с вписанной окружностью",
+      "reason": "Требуется радиус окружности, не площадь трапеции листа 514; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar29.pdf",
+        "reports/pilot_26_35/evidence/v29_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B8",
+      "field": "topics_id",
+      "old": 102,
+      "new": "Физический смысл производной: скорость по закону движения",
+      "reason": "Требуется скорость как производная координаты, а не отдельная техника степенной производной; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar29.pdf",
+        "reports/pilot_26_35/evidence/v29_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B11",
+      "field": "topics_id",
+      "old": 583,
+      "new": "Объём составного прямоугольного многогранника",
+      "reason": "Исходник — ступенчатый многогранник; лист 583 ограничен объёмом целого прямоугольного параллелепипеда. Точного листа составных тел нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar29.pdf",
+        "reports/pilot_26_35/evidence/v29_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C6",
+      "field": "topics_id",
+      "old": 278,
+      "new": "Экстремумы сумм произведений чисел на окружности",
+      "reason": "Задача комбинаторная, тригонометрии листа 278 нет; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar29.pdf",
+        "reports/pilot_26_35/evidence/v29_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 432,
+      "new": "Системы показательных и логарифмических неравенств",
+      "reason": "Смешанная система содержит обе функции; лист 432 ограничен логарифмическими системами, точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar29.pdf",
+        "reports/pilot_26_35/evidence/v29_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    }
+  ]
+}

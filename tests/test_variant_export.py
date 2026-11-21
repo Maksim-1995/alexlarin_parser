@@ -206,6 +206,31 @@ def test_image_continuing_task_on_next_page_does_not_need_repeated_label():
     assert variant_export._owner(pymupdf.Rect(100, 30, 190, 120), anchors, given, 2, 400) == "C1"
 
 
+def test_image_at_top_of_unlabelled_right_column_continues_last_task():
+    anchors = [{"source_label": "C1", "x": 30, "y": 140},
+               {"source_label": "C6", "x": 30, "y": 440}]
+    given = [{"source_label": label, "page_numbers": [3]} for label in ("C1", "C6")]
+    assert variant_export._owner(pymupdf.Rect(500, 60, 760, 180), anchors, given, 3, 800) == "C6"
+    # В левой колонке над первой меткой нет продолжения предыдущей колонки.
+    assert variant_export._owner(pymupdf.Rect(50, 30, 150, 90), anchors, given, 3, 800) is None
+
+
+def test_tall_figure_belongs_to_label_at_its_top_not_label_near_its_center():
+    anchors = [{"source_label": "B8", "x": 440, "y": 70, "y1": 86},
+               {"source_label": "B9", "x": 440, "y": 180, "y1": 196},
+               {"source_label": "B10", "x": 440, "y": 250, "y1": 266}]
+    given = [{"source_label": a["source_label"], "page_numbers": [2]} for a in anchors]
+    assert variant_export._owner(pymupdf.Rect(660, 64, 814, 324), anchors, given, 2, 842) == "B8"
+
+
+@pytest.mark.parametrize("top", [442, 433])
+def test_figure_raised_slightly_above_its_task_label(top):
+    anchors = [{"source_label": "B10", "x": 440, "y": 370, "y1": 386},
+               {"source_label": "B11", "x": 440, "y": 463, "y1": 479}]
+    given = [{"source_label": a["source_label"], "page_numbers": [2]} for a in anchors]
+    assert variant_export._owner(pymupdf.Rect(694, top, 815, 558), anchors, given, 2, 842) == "B11"
+
+
 def test_vector_detection_excludes_table_grid_and_tall_radical_but_keeps_geometry():
     with pymupdf.open() as document:
         page = document.new_page(width=600, height=600)

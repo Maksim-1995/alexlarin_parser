@@ -1,0 +1,124 @@
+{
+  "version": 3,
+  "variant_key": "ege_2013_trvar30",
+  "source_url": "https://alexlarin.net/ege/2013/trvar30.html",
+  "pdf_sha256": "4ba7c050b52f1965293f036bbd424b70a226680145e7d794490f0bd6a958a16f",
+  "corrections": [
+    {
+      "source_label": "B7",
+      "field": "topics_id",
+      "old": 120,
+      "new": "Преобразование степеней с иррациональными показателями",
+      "reason": "Показатели содержат √7, а лист 120 ограничен натуральными показателями; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar30.pdf",
+        "reports/pilot_26_35/evidence/v30_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B11",
+      "field": "topics_id",
+      "old": 583,
+      "new": 574,
+      "reason": "Четыре вершины исходного условия образуют пирамиду, не целый параллелепипед.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar30.pdf",
+        "reports/pilot_26_35/evidence/v30_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B11",
+      "field": "exams_id",
+      "old": 182,
+      "new": 187,
+      "reason": "Требуется объём пирамиды с четырьмя заданными вершинами.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar30.pdf",
+        "reports/pilot_26_35/evidence/v30_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B12",
+      "field": "topics_id",
+      "old": 431,
+      "new": 476,
+      "reason": "Логарифмическая зависимость и ограничение времени — прикладное неравенство.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar30.pdf",
+        "reports/pilot_26_35/evidence/v30_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C4",
+      "field": "topics_id",
+      "old": 633,
+      "new": "Вписанный четырёхугольник с последовательными длинами сторон",
+      "reason": "В условии нет теоремы Птолемея о диагоналях; требуется радиус по сторонам, точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar30.pdf",
+        "reports/pilot_26_35/evidence/v30_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C5",
+      "field": "topics_id",
+      "old": 447,
+      "new": "Уравнения с модулем и параметрами",
+      "reason": "Лист 447 не учитывает двойной параметр и требование для любого b; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar30.pdf",
+        "reports/pilot_26_35/evidence/v30_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C6",
+      "field": "exams_id",
+      "old": 266,
+      "new": 268,
+      "reason": "Сюжетная задача о наборах гирь и единственности представления масс.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar30.pdf",
+        "reports/pilot_26_35/evidence/v30_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 432,
+      "new": "Системы показательных и логарифмических неравенств",
+      "reason": "Смешанная система содержит обе функции; лист 432 ограничен логарифмическими системами, точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar30.pdf",
+        "reports/pilot_26_35/evidence/v30_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) две гирьки по 167 граммов и 166 гирек по 1 грамму; б) три набора.",
+      "reason": "Пустая исходная PNG дополнена совпадающей публикацией; собственное решение не генерировалось.",
+      "evidence": [
+        "https://math-ege.sdamgia.ru/problem?id=506025",
+        "reports/pilot_26_35/published_sources.json"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}

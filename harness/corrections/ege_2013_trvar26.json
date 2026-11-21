@@ -1,0 +1,124 @@
+{
+  "version": 3,
+  "variant_key": "ege_2013_trvar26",
+  "source_url": "https://alexlarin.net/ege/2013/trvar26.html",
+  "pdf_sha256": "275dd85a85cf8ba86b95664c25339b48ce70a3d5ccc4642088792e9a1a51f47b",
+  "corrections": [
+    {
+      "source_label": "C1",
+      "field": "condition",
+      "old": "а) Решите уравнение $\\log_5\\left(5+3\\cos\\left(3x-\\frac{\\pi}{4}\\right)\\right)=\\sin^2\\left(2x-\\frac{2\\pi}{3}\\right)$\n\nб) Найдите все корни на промежутке $[-\\pi;2\\pi]$",
+      "new": "а) Решите уравнение $\\log_2\\left(5+3\\cos\\left(3x-\\frac{\\pi}{4}\\right)\\right)=\\sin^2\\left(2x-\\frac{2\\pi}{3}\\right)$\n\nб) Найдите все корни на промежутке $[-\\pi;2\\pi]$",
+      "reason": "По PDF основание логарифма 2, OCR ошибочно заменил его на 5.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar26.pdf",
+        "reports/pilot_26_35/evidence/v26_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C3",
+      "field": "condition",
+      "old": "Решите систему неравенств:\n$$\\begin{cases}\n7^{x-\\frac{1}{8}x^2} < 7^{1-x}\\cdot(\\sqrt{7})^2 + 6 \\\\\n\\log_x 2 < \\log_{6-x} 2\n\\end{cases}$$",
+      "new": "Решите систему неравенств:\n$$\\begin{cases}\n7^{x-\\frac{1}{8}x^2} < 7^{1-x}\\cdot(\\sqrt[8]{7})^{x^2} + 6 \\\\\n\\log_x 2 < \\log_{6-x} 2\n\\end{cases}$$",
+      "reason": "Восстановлены восьмой корень из 7 и показатель x² по увеличенной странице.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar26.pdf",
+        "reports/pilot_26_35/evidence/v26_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B4",
+      "field": "topics_id",
+      "old": 19,
+      "new": 18,
+      "reason": "Цена топлива и ответ дробные; лист натуральных чисел 19 не подходит.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar26.pdf",
+        "reports/pilot_26_35/evidence/v26_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B8",
+      "field": "topics_id",
+      "old": 515,
+      "new": "Первообразная и определённый интеграл по графику функции",
+      "reason": "Лист 515 относится к планиметрическим площадям, задача о разности значений первообразной; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar26.pdf",
+        "reports/pilot_26_35/evidence/v26_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "B9",
+      "field": "topics_id",
+      "old": 583,
+      "new": "Площадь поверхности прямоугольного параллелепипеда",
+      "reason": "Лист 583 относится к объёму, требуется площадь поверхности; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar26.pdf",
+        "reports/pilot_26_35/evidence/v26_page2.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C4",
+      "field": "topics_id",
+      "old": 675,
+      "new": "Трапеция с вписанной окружностью",
+      "reason": "Требуются основания по касательным и периметру, не средняя линия листа 675; точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar26.pdf",
+        "reports/pilot_26_35/evidence/v26_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C5",
+      "field": "exams_id",
+      "old": 257,
+      "new": 251,
+      "reason": "Определение параметров тождества, использование симметрий не задано условием.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar26.pdf",
+        "reports/pilot_26_35/evidence/v26_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C3",
+      "field": "topics_id",
+      "old": 432,
+      "new": "Системы показательных и логарифмических неравенств",
+      "reason": "Смешанная система содержит обе функции; лист 432 ограничен логарифмическими системами, точного листа нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2013/trvar26.pdf",
+        "reports/pilot_26_35/evidence/v26_page3.png",
+        "data/exams.csv; data/topics.csv — полные проверенные деревья"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-20"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) 33. б) Такой ячейке пришлось бы остаться открытой после второго прохода, но при третьем проходе закрываются номера с остатком 5 при делении на 8, включая 2013; противоречие. в) Подходит бесконечное семейство $n=50+4^k$, $k\\geq3$: после первых шести проходов остаются ячейка 33 и $4^{k-3}$ ячеек справа; дальнейшие пары проходов сохраняют ячейку 33.",
+      "reason": "Пустая исходная PNG дополнена совпадающей публикацией; собственное решение не генерировалось.",
+      "evidence": [
+        "https://math-ege.sdamgia.ru/problem?id=506001",
+        "reports/pilot_26_35/published_sources.json"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}

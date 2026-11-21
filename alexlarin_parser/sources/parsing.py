@@ -165,8 +165,33 @@ def task_positions(page):
     positions = []
     words = page.get_text("words")
     visible_words = [pymupdf.Rect(*word[:4]) * page.rotation_matrix for word in words]
-    label_columns = [visible_words[index].x0 for index, word in enumerate(words)
-                     if word[7] == 0 and re.fullmatch(r"[BВCС]\d+[.)]?", word[4], re.I)]
+    whole_labels = [visible_words[index] for index, word in enumerate(words)
+                    if word[7] == 0 and re.fullmatch(r"[BВCС]\d+[.)]?", word[4], re.I)]
+    label_columns = [rect.x0 for rect in whole_labels]
+    split_neighbors = {}
+    for index, word in enumerate(words):
+        if word[7] != 0 or word[4].upper() not in {"B", "В", "C", "С"}:
+            continue
+        anchor = visible_words[index]
+        neighbors = [j for j, other in enumerate(words)
+                     if re.fullmatch(r"\d+[.)]?", other[4])
+                     and -1 <= visible_words[j].x0 - anchor.x1 <= 4
+                     and abs((visible_words[j].y0 + visible_words[j].y1)
+                             - (anchor.y0 + anchor.y1)) <= 4]
+        if len(neighbors) == 1:
+            split_neighbors[index] = neighbors[0]
+    # Целые метки могут быть только в правой колонке, а все метки левой —
+    # раздельными. Подтверждаем новую линию начал повторяющимися крупными
+    # метками: обычные фразы «В 2008 году» имеют размер шрифта условия.
+    if whole_labels:
+        label_height = max(rect.height for rect in whole_labels)
+        large_anchors = [visible_words[i] for i in split_neighbors
+                         if visible_words[i].height >= .9 * label_height]
+        label_columns.extend(anchor.x0 for anchor in large_anchors if any(
+            abs(other.x0 - anchor.x0) <= 6
+            and abs(other.y0 - anchor.y0) > 2 * label_height
+            for other in large_anchors
+        ))
     for index, word in enumerate(words):
         x0, y0, x1, y1, value, block, line, word_num = word
         if word_num != 0:
@@ -187,13 +212,8 @@ def task_positions(page):
             # на той же линии начал задач, а не внутри текста условия.
             if label_columns and not any(abs(anchor.x0 - x) <= 6 for x in label_columns):
                 continue
-            neighbors = [j for j, other in enumerate(words)
-                         if re.fullmatch(r"\d+[.)]?", other[4])
-                         and -1 <= visible_words[j].x0 - anchor.x1 <= 4
-                         and abs((visible_words[j].y0 + visible_words[j].y1)
-                                 - (anchor.y0 + anchor.y1)) <= 4]
-            if len(neighbors) == 1:
-                other = words[neighbors[0]]
+            if index in split_neighbors:
+                other = words[split_neighbors[index]]
                 candidate += other[4]
                 joined = pymupdf.Rect(x0, y0, x1, y1) | pymupdf.Rect(*other[:4])
                 x0, y0, x1, y1 = joined
