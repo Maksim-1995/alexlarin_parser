@@ -47,7 +47,7 @@ AlexParser — Python CLI для обработки тренировочных �
 | [exporting/images.py](../alexlarin_parser/exporting/images.py) | Извлечение и привязка растровых/векторных рисунков, размещения, повороты и маски |
 | [exporting/workbook.py](../alexlarin_parser/exporting/workbook.py), [metadata.py](../alexlarin_parser/exporting/metadata.py) | Excel и контракт метаданных `about` |
 | [exporting/archive.py](../alexlarin_parser/exporting/archive.py), [service.py](../alexlarin_parser/exporting/service.py) | ZIP, оформление таблиц/ответов, проверка выдачи и публикация с резервной копией |
-| [provider.py](../alexlarin_parser/provider.py), [requests_counter.py](../alexlarin_parser/requests_counter.py) | Прямой DeepSeek-транспорт, настройки, фактические попытки и usage |
+| [provider.py](../alexlarin_parser/provider.py), [requests_counter.py](../alexlarin_parser/requests_counter.py) | Последовательная цепочка провайдеров, настройки, фактические попытки и usage |
 | [io.py](../alexlarin_parser/io.py), [prompts/](../alexlarin_parser/prompts/) | Атомарная запись, хеши и загрузка точных UTF-8 текстов промптов |
 | Корневые [legacy_sources.py](../legacy_sources.py), [recognizer.py](../recognizer.py), [parsers.py](../parsers.py), [refine_conditions.py](../refine_conditions.py) | Прежние инструменты, разбор и совместимость варианта 542 |
 | Корневые [tests/](../tests/), [preview.html](../preview.html) | Автоматические проверки и ручной просмотр TSV/MathJax |
@@ -123,24 +123,31 @@ class, year, date, topic, exam_id, title, code, source_name, is_public, source_u
 
 | Провайдер | Реальная интеграция |
 |---|---|
-| DeepSeek | Основной CLI: один `DeepSeekClient` на последовательный пакет, OCR и классификация через `requests` |
-| Gemini | Корневые `recognizer.py`, `refine_conditions.py` и `classification/legacy.py`; локальная совместимость старого OCR-кэша 542 |
-| NVIDIA | Отдельный профиль в корневом `check_deepseek.py --provider nvidia` |
+| Gemini → NVIDIA NIM → Groq → OpenRouter `:free` | Основной CLI через один `DeepSeekClient`, если заданы ключ и модель этапа |
+| DeepSeek | Последний, платный резерв того же клиента |
+| Прежние интеграции Gemini/NVIDIA | Корневые Gemini-утилиты, legacy-кэш 542 и отдельный профиль `check_deepseek.py --provider nvidia` сохранены |
 
-Общего выбора провайдера и автоматического fallback в основном CLI нет.
-Gemini/NVIDIA не становятся провайдером конвейера при наличии их ключей.
+Порядок цепочки фиксирован; провайдер без модели текущего этапа пропускается.
+Читаются `<PREFIX>_API_KEY`, `<PREFIX>_OCR_MODEL` и
+`<PREFIX>_CLASSIFICATION_MODEL` для GEMINI/NVIDIA/GROQ/OPENROUTER.
+Одного ключа недостаточно; DeepSeek-ключ для успешного бесплатного этапа не нужен.
+Первый успешный ответ завершает цепочку. 429/503/тайм-аут включают cooldown
+бесплатного провайдера; `Retry-After` учитывается числом или HTTP-датой.
 
 Настройки основного потока определяет `DeepSeekSettings`, шаблон переменных —
 [.env.example](../.env.example). Основной CLI читает локальный `.env`;
 уже заданные переменные окружения приоритетны, shell-подстановки не выполняются.
 Прежние Gemini-инструменты и `check_deepseek.py` читают окружение процесса.
-В коде исходная модель DeepSeek — `deepseek-flash`, OCR всегда отключает
-thinking, классификация имеет отдельную настройку.
+В коде исходная модель DeepSeek — `deepseek-flash`. Только DeepSeek получает
+thinking: OCR отключает его, классификация имеет отдельную настройку.
 
 У основного DeepSeek-клиента отключены автоматические HTTP-повторы и редиректы.
 Счётчик увеличивается перед фактической отправкой; тайм-ауты и неуспешные
-ответы входят в число попыток. HTTP 401/402/403 блокируют дальнейшие платные
-обращения пакета. Загрузки источников учитываются отдельно. Расчёт стоимости
+ответы входят в число попыток, включая каждый переход цепочки.
+HTTP 401/402/403 отключают отказавшего провайдера; отказ DeepSeek блокирует
+дальнейшие платные обращения, но сохраняет бесплатные для следующих вариантов.
+В манифесте цепочка обозначается `fallback-chain`, фактический провайдер —
+в каждой записи `attempts`. Загрузки источников учитываются отдельно. Расчёт стоимости
 по тарифам не реализован: `cost` всегда `None`. Неполный usage отмечается через
 `unknown_usage_attempts`; неизвестные затраты не считаются нулевыми.
 
@@ -256,7 +263,7 @@ findings сохраняются, но одобрение не переносит
 Из корня проекта полная локальная регрессия в существующем окружении:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 DEEPSEEK_API_KEY='' GEMINI_API_KEY='' NVIDIA_API_KEY='' .venv/bin/python -m pytest -q -p no:cacheprovider
+PYTHONDONTWRITEBYTECODE=1 DEEPSEEK_API_KEY='' GEMINI_API_KEY='' NVIDIA_API_KEY='' GROQ_API_KEY='' OPENROUTER_API_KEY='' .venv/bin/python -m pytest -q -p no:cacheprovider
 ```
 
 Справка CLI без запуска обработки:
@@ -286,7 +293,8 @@ git status --short
 - Корректные HTTP/JSON, существующие ID, целый ZIP и пройденные тесты
   не подтверждают математическую точность. У №1–12 остаются ошибки OCR и тем;
   актуальные findings и пути доказательств перечислены в §17 инструкций.
-- Основной CLI не предоставляет общий выбор AI-провайдера. Ограниченные
+- Бесплатная цепочка проверена локально на подставном транспорте; доступность
+  конкретных моделей/аккаунтов реальными API не проверена. Ограниченные
   эвристики классификации и векторных рисунков требуют содержательной/визуальной
   сверки. Ручные коррекции с происхождением поддерживают категории и условия;
   версия 3 также заполняет пустые ответы из проверенных публикаций с provenance.

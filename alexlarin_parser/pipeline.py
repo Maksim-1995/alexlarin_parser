@@ -301,8 +301,11 @@ def _run_variant(base_dir, context, state, client, *, run_id, report_dir,
         _execute_variant(base_dir, context, state, client, run_debug=run_debug, cache_dir=cache_dir,
                          fresh_ai=fresh_ai, local_only=local_only, save=save)
     except PaidCallsBlocked as error:
-        blocked = str(error)
-        state["status"], state["error"] = "FAILED", blocked
+        # DeepSeekClient блокирует только платный хвост цепочки. Бесплатные
+        # провайдеры могут восстановиться после cooldown к следующему варианту.
+        if not client.settings.free_providers:
+            blocked = str(error)
+        state["status"], state["error"] = "FAILED", str(error)
     except Exception as error:
         state["status"], state["error"] = "FAILED", f"{type(error).__name__}: {error}"
     except KeyboardInterrupt:
@@ -372,6 +375,8 @@ def run_batch(base_dir, contexts, *, client=None, fresh_ai=False, local_only=Fal
     save()
     owned_client = client is None
     client = client or DeepSeekClient(DeepSeekSettings.from_env(base_dir))
+    if client.settings.free_providers:
+        report["provider"] = "fallback-chain"
     blocked = None
     started = time.monotonic()
     # Справочники проверяем до любых платных вызовов, включая OCR.

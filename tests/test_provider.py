@@ -6,12 +6,15 @@
 
 import json
 import os
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 
 import pytest
 import requests
 
 from ai_requests import AIRequestCounter
 from provider import DeepSeekClient, DeepSeekSettings, PaidCallsBlocked, ProviderError, load_env, usage_summary
+from alexlarin_parser import provider
 
 
 TEST_KEY = "unit-test-not-a-real-api-key"
@@ -26,10 +29,11 @@ def body(*, content='{"tasks": []}', finish="stop", usage=True):
 
 
 class FakeResponse:
-    def __init__(self, status=200, data=None, *, invalid_json=False):
+    def __init__(self, status=200, data=None, *, invalid_json=False, headers=None):
         self.status_code = status
         self.data = body() if data is None else data
         self.invalid_json = invalid_json
+        self.headers = headers or {}
 
     def json(self):
         if self.invalid_json:
@@ -235,3 +239,138 @@ def test_settings_use_only_explicit_environment_configuration(tmp_path, monkeypa
     assert settings.base_url == "https://api.deepseek.com"
     assert settings.model == "deepseek-flash"
     assert settings.identity("ocr")["thinking"] == settings.identity("classification")["thinking"] == "disabled"
+
+
+@pytest.fixture
+def chain_settings(tmp_path, monkeypatch):
+    # Ни ключи процесса, ни рабочий .env не участвуют в проверке.
+    monkeypatch.setattr(os, "environ", {})
+    for prefix in ("OPENROUTER", "GROQ", "NVIDIA", "GEMINI"):
+        monkeypatch.setenv(f"{prefix}_API_KEY", f"test-{prefix}-key")
+        for stage in ("OCR", "CLASSIFICATION"):
+            model = f"test-{prefix}-{stage}"
+            monkeypatch.setenv(f"{prefix}_{stage}_MODEL", model + (":free" if prefix == "OPENROUTER" else ""))
+    return DeepSeekSettings.from_env(tmp_path)
+
+
+@pytest.mark.parametrize("stage", ["ocr", "classification"])
+@pytest.mark.parametrize("successful_index", range(5))
+def test_chain_order_first_success_payload_and_actual_attempts(tmp_path, chain_settings, stage, successful_index):
+    from dataclasses import replace
+
+    settings = replace(chain_settings, api_key=TEST_KEY, classification_thinking="enabled")
+    session = FakeSession(*[FakeResponse(status=503) for _ in range(successful_index)], FakeResponse())
+    client = DeepSeekClient(settings, session=session)
+    assert client.request_json(MESSAGES, stage=stage, debug_dir=tmp_path) == {"tasks": []}
+    order = ["gemini", "nvidia-nim", "groq", "openrouter", "deepseek-direct"]
+    assert [attempt["provider"] for attempt in client.attempts] == order[:successful_index + 1]
+    assert len(session.calls) == client.counter.total == getattr(client.counter, stage) == successful_index + 1
+    assert [a["status"] for a in client.attempts] == ["FAILED"] * successful_index + ["RECEIVED"]
+    endpoints = [p.base_url for p in settings.free_providers] + [settings.base_url]
+    models = [p.model_for(stage) for p in settings.free_providers] + [settings.model]
+    for name, endpoint, model, call in zip(order, endpoints, models, session.calls):
+        assert call["url"] == endpoint + "/chat/completions"
+        assert call["json"]["model"] == model
+        assert call["allow_redirects"] is False
+        assert call["timeout"] == (15, 120)
+        if name == "deepseek-direct":
+            assert call["json"]["thinking"] == {"type": "disabled" if stage == "ocr" else "enabled"}
+        else:
+            assert "thinking" not in call["json"]
+        assert ("max_completion_tokens" in call["json"]) == (name == "groq")
+        assert ("max_tokens" in call["json"]) == (name != "groq")
+        assert ("response_format" in call["json"]) == (name != "nvidia-nim")
+
+
+def test_stage_specific_free_models_do_not_require_deepseek_key(tmp_path, chain_settings, monkeypatch):
+    monkeypatch.delenv("GEMINI_CLASSIFICATION_MODEL")
+    monkeypatch.delenv("NVIDIA_OCR_MODEL")
+    settings = DeepSeekSettings.from_env(tmp_path)
+    session = FakeSession(FakeResponse(), FakeResponse())
+    client = DeepSeekClient(settings, session=session)
+    for stage in ("ocr", "classification"):
+        assert client.request_json(MESSAGES, stage=stage, debug_dir=tmp_path) == {"tasks": []}
+    assert not settings.api_key and client.blocked is None
+    assert [a["provider"] for a in client.attempts] == ["gemini", "nvidia-nim"]
+    assert client.counter.ocr == client.counter.classification == 1
+
+
+@pytest.mark.parametrize("status", [429, 503])
+@pytest.mark.parametrize("retry_after,delay", [("37", 37), ("http-date", 90), (None, 60), ("invalid", 60)])
+def test_cooldown_respects_retry_after_and_retries_after_expiry(
+    tmp_path, chain_settings, monkeypatch, status, retry_after, delay,
+):
+    now = [100.0]
+    monkeypatch.setattr(provider.time, "monotonic", lambda: now[0])
+
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 11, 25, 12, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(provider, "datetime", FrozenDatetime)
+    if retry_after == "http-date":
+        retry_after = format_datetime(FrozenDatetime.now() + timedelta(seconds=90), usegmt=True)
+    headers = {"Retry-After": retry_after} if retry_after is not None else {}
+    session = FakeSession(FakeResponse(status=status, headers=headers), FakeResponse(), FakeResponse(), FakeResponse())
+    client = DeepSeekClient(chain_settings, session=session)
+    client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)
+    now[0] += delay - 0.1
+    client.request_json(MESSAGES, stage="classification", debug_dir=tmp_path)
+    now[0] += 0.2
+    client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)
+    assert [a["provider"] for a in client.attempts] == ["gemini", "nvidia-nim", "nvidia-nim", "gemini"]
+    assert len(session.calls) == client.counter.total == 4
+
+
+def test_timeout_falls_back_and_cools_down_without_extra_attempts(tmp_path, chain_settings, monkeypatch):
+    now = [100.0]
+    monkeypatch.setattr(provider.time, "monotonic", lambda: now[0])
+    session = FakeSession(requests.Timeout("test timeout"), FakeResponse(), FakeResponse(), FakeResponse())
+    client = DeepSeekClient(chain_settings, session=session)
+    client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)
+    now[0] += 59
+    client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)
+    now[0] += 2
+    client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)
+    assert [a["provider"] for a in client.attempts] == ["gemini", "nvidia-nim", "nvidia-nim", "gemini"]
+    assert len(session.calls) == client.counter.ocr == 4
+    assert client.attempts[0]["error"] == "Timeout"
+
+
+@pytest.mark.parametrize("status", [401, 403])
+@pytest.mark.parametrize("failed_index", range(4))
+def test_auth_failure_disables_only_current_free_provider(tmp_path, chain_settings, status, failed_index):
+    from dataclasses import replace
+
+    settings = replace(chain_settings, api_key=TEST_KEY, free_providers=chain_settings.free_providers[failed_index:])
+    session = FakeSession(FakeResponse(status=status, invalid_json=True), FakeResponse(), FakeResponse())
+    client = DeepSeekClient(settings, session=session)
+    for stage in ("ocr", "classification"):
+        client.request_json(MESSAGES, stage=stage, debug_dir=tmp_path)
+    order = [p.name for p in settings.free_providers] + ["deepseek-direct"]
+    assert [a["provider"] for a in client.attempts] == [order[0], order[1], order[1]]
+    assert client._disabled == {order[0]} and client.blocked is None
+    assert len(session.calls) == client.counter.total == 3
+
+
+def test_failed_chain_without_paid_key_counts_only_actual_requests(tmp_path, chain_settings):
+    session = FakeSession(*[FakeResponse(status=503) for _ in range(4)])
+    client = DeepSeekClient(chain_settings, session=session)
+    with pytest.raises(PaidCallsBlocked):
+        client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)
+    with pytest.raises(PaidCallsBlocked):
+        client.request_json(MESSAGES, stage="classification", debug_dir=tmp_path)
+    assert len(session.calls) == client.counter.total == len(client.attempts) == 4
+    assert client.counter.classification == 0
+
+
+@pytest.mark.parametrize("model", ["paid-model", "", "provider/model:free"])
+def test_openrouter_accepts_only_explicit_free_models(tmp_path, chain_settings, monkeypatch, model):
+    monkeypatch.setenv("OPENROUTER_OCR_MODEL", model)
+    if model == "paid-model":
+        with pytest.raises(ValueError, match=":free"):
+            DeepSeekSettings.from_env(tmp_path)
+    else:
+        settings = DeepSeekSettings.from_env(tmp_path)
+        assert settings.free_providers[-1].ocr_model == model

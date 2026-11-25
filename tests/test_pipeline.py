@@ -5,10 +5,13 @@ import csv
 import json
 from pathlib import Path
 import re
+import shutil
+from unittest.mock import Mock
 from zipfile import ZipFile
 
 import pymupdf
 import pytest
+import requests
 from openpyxl import load_workbook
 
 from ai_requests import AIRequestCounter
@@ -17,6 +20,8 @@ from pipeline import plan_run, run_batch, selected_contexts
 from provider import DeepSeekSettings, PaidCallsBlocked
 from variant_sources import VariantContext
 from alexlarin_parser.io import file_sha256
+from alexlarin_parser import provider
+from alexlarin_parser.paths import PROJECT_ROOT
 
 
 def write_catalogues(base):
@@ -270,6 +275,94 @@ def test_authorization_failure_stops_new_model_attempts_for_batch(project):
     assert state_for(report, contexts[1])["attempts"] == []
     assert report["usage"]["unknown_usage_attempts"] == 1
     assert report["usage"]["cost"] is None
+
+
+def http_response(data, status=200):
+    response = requests.Response()
+    response.status_code = status
+    response._content = json.dumps(data).encode("utf-8")
+    return response
+
+
+def completion(data):
+    return http_response({"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(data)}}]})
+
+
+@pytest.mark.parametrize("paid_status", [None, 401, 403])
+def test_paid_block_does_not_stop_recovered_free_provider_in_next_variant(project, monkeypatch, paid_status):
+    base, contexts, source_by_key = project
+    now = [100.0]
+    monkeypatch.setattr(provider.time, "monotonic", lambda: now[0])
+
+    def prepare(context, *, local_only=False):
+        if context == contexts[1]:
+            now[0] += 61  # Бесплатный провайдер восстановился к следующему варианту.
+        return copy.deepcopy(source_by_key[context.variant_key])
+
+    monkeypatch.setattr(pipeline, "prepare_sources", prepare)
+    settings = DeepSeekSettings(
+        api_key="test-paid-key" if paid_status else "", dpi=72,
+        free_providers=(provider._FreeProvider("gemini", "https://free.example/v1", "test-free-key", "vision", "text"),),
+    )
+    response_client = FakeClient()
+    responses = [http_response({"error": "busy"}, 503)]
+    if paid_status:
+        responses.append(http_response({"error": "denied"}, paid_status))
+    for stage, page in (("ocr", 1), ("ocr", 2), ("classification", None)):
+        messages = ([{"content": [{"text": f"'page_num': {page}"}]}] if stage == "ocr" else
+                    [{}, {"content": json.dumps({"variant_key": contexts[1].variant_key,
+                                                 "tasks": [{"task_num": 1}, {"task_num": 2}]})}])
+        responses.append(completion(response_client.request_json(messages, stage=stage, debug_dir=contexts[1].debug_dir)))
+    session = Mock()
+    session.post.side_effect = responses
+    client = provider.DeepSeekClient(settings, session=session)
+    report = run_batch(base, contexts, client=client)
+    assert report["variants"][0]["status"] == "FAILED"
+    assert report["variants"][1]["status"] == "NEEDS_REVIEW"
+    assert report["variants"][1]["result_current_attempt"] is True
+    assert [a["provider"] for a in report["variants"][1]["attempts"]] == ["gemini"] * 3
+    assert session.post.call_count == client.counter.total == 4 + bool(paid_status)
+    assert report["ocr_calls"] == 3 + bool(paid_status) and report["classification_calls"] == 1
+    assert sum(a["provider"] == "deepseek-direct" for a in client.attempts) == bool(paid_status)
+
+
+def test_local_variant40_real_stages_use_free_chain_without_paid_key(tmp_path, monkeypatch):
+    """Реальные источники/ответы №40 читаются, все новые файлы — в tmp_path."""
+    original = VariantContext.from_url("https://alexlarin.net/ege/2014/trvar40.html", PROJECT_ROOT)
+    if not original.source_dir.is_dir() or not (original.cache_dir / "classification.json").is_file():
+        pytest.skip("Локальные источники и сохранённые ответы №40 отсутствуют")
+    context = VariantContext.from_url(original.source_url, tmp_path)
+    shutil.copytree(original.source_dir, context.source_dir)
+    shutil.copytree(PROJECT_ROOT / "data", tmp_path / "data")
+    page_responses = [json.loads(path.read_text())["response"]
+                      for path in sorted((original.cache_dir / "ocr").glob("page_*.json"))]
+    classification = json.loads((original.cache_dir / "classification.json").read_text())["response"]
+    assert len(page_responses) == 3
+    # Создание настоящего клиента остаётся в run_batch → from_env.
+    monkeypatch.setattr(provider.os, "environ", {
+        "DEEPSEEK_API_KEY": "", "OCR_DPI": "72",
+        "GEMINI_API_KEY": "test-free-key", "GEMINI_OCR_MODEL": "test-vision",
+        "NVIDIA_API_KEY": "test-nvidia-key", "NVIDIA_CLASSIFICATION_MODEL": "test-text",
+    })
+    session = Mock()
+    session.post.side_effect = [completion(data) for data in [*page_responses, classification]]
+    monkeypatch.setattr(provider.requests, "Session", lambda: session)
+    report = run_batch(tmp_path, [context], local_only=True)
+    state = report["variants"][0]
+    assert state["error"] is None and state["result_current_attempt"] is True
+    assert report["provider"] == "fallback-chain"
+    assert (state["task_count"], state["page_count"], state["download_count"]) == (20, 3, 0)
+    assert (report["ocr_calls"], report["classification_calls"]) == (3, 1)
+    assert [a["provider"] for a in state["attempts"]] == ["gemini"] * 3 + ["nvidia-nim"]
+    assert session.post.call_count == 4
+    assert all("thinking" not in call.kwargs["json"] for call in session.post.call_args_list)
+    ocr_content = session.post.call_args_list[0].kwargs["json"]["messages"][0]["content"]
+    assert any(part["type"] == "image_url" for part in ocr_content)
+    payload = json.loads(session.post.call_args_list[-1].kwargs["json"]["messages"][1]["content"])
+    assert payload["variant_key"] == "ege_2014_trvar40" and len(payload["tasks"]) == 20
+    rows, about = read_workbook(context)
+    assert len(rows) == 21 and about["year"] == 2014 and about["source_url"] == original.source_url
+    session.close.assert_called_once()
 
 
 def test_invalid_catalogue_blocks_before_sources_or_paid_api(project, monkeypatch):

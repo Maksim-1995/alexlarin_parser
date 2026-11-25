@@ -17,6 +17,7 @@ from requests.adapters import HTTPAdapter
 
 from .requests_counter import AIRequestCounter
 from .io import atomic_json
+from email.utils import parsedate_to_datetime
 
 
 def load_env(path):
@@ -45,6 +46,80 @@ def load_env(path):
             value = value.split(" #", 1)[0].rstrip()
         os.environ.setdefault(key.strip(), value)
 
+_FREE_ENDPOINTS = (
+    ("gemini", "GEMINI", "https://generativelanguage.googleapis.com/v1beta/openai"),
+    ("nvidia-nim", "NVIDIA", "https://integrate.api.nvidia.com/v1"),
+    ("groq", "GROQ", "https://api.groq.com/openai/v1"),
+    ("openrouter", "OPENROUTER", "https://openrouter.ai/api/v1"),
+)
+
+
+@dataclass(frozen=True)
+class _FreeProvider:
+    name: str
+    base_url: str
+    api_key: str = field(repr=False)
+    ocr_model: str
+    classification_model: str
+
+    def model_for(self, stage):
+        return self.ocr_model if stage == "ocr" else self.classification_model
+
+
+def _load_free_providers():
+    providers = []
+    for name, prefix, base_url in _FREE_ENDPOINTS:
+        api_key = os.environ.get(f"{prefix}_API_KEY", "").strip()
+        ocr_model = os.environ.get(f"{prefix}_OCR_MODEL", "").strip()
+        classification_model = os.environ.get(
+            f"{prefix}_CLASSIFICATION_MODEL", ""
+        ).strip()
+        if not api_key or not (ocr_model or classification_model):
+            continue
+
+        if name == "openrouter" and any(
+            model and not model.endswith(":free")
+            for model in (ocr_model, classification_model)
+        ):
+            raise ValueError("Модели OpenRouter должны иметь суффикс :free")
+
+        providers.append(
+            _FreeProvider(name, base_url, api_key, ocr_model, classification_model)
+        )
+    return tuple(providers)
+
+
+def _retry_delay(headers):
+    value = headers.get("Retry-After")
+    if not value:
+        return 60
+
+    try:
+        return max(1, int(value))
+    except ValueError:
+        pass
+
+    try:
+        retry_at = parsedate_to_datetime(value)
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        return max(1, (retry_at - datetime.now(timezone.utc)).total_seconds())
+    except (TypeError, ValueError, OverflowError):
+        return 60
+
+
+def _redact(value, api_key):
+    if isinstance(value, str):
+        return value.replace(api_key, "[REDACTED]")
+    if isinstance(value, list):
+        return [_redact(item, api_key) for item in value]
+    if isinstance(value, dict):
+        return {
+            _redact(key, api_key): _redact(item, api_key)
+            for key, item in value.items()
+        }
+    return value
+
 
 @dataclass(frozen=True)
 class DeepSeekSettings:
@@ -63,6 +138,8 @@ class DeepSeekSettings:
     classification_thinking: str = "disabled"
     max_tokens: int = 16384
     dpi: int = 300
+    free_providers: tuple[_FreeProvider, ...] = ()
+
 
     def __post_init__(self):
         """Отклонить неверный thinking, неположительные лимиты и не-HTTPS URL."""
@@ -93,6 +170,7 @@ class DeepSeekSettings:
             classification_thinking=os.environ.get("DEEPSEEK_CLASSIFICATION_THINKING", "disabled"),
             max_tokens=int(os.environ.get("DEEPSEEK_MAX_TOKENS", "16384")),
             dpi=int(os.environ.get("OCR_DPI", "300")),
+            free_providers=_load_free_providers(),
         )
 
     def identity(self, stage):
@@ -102,12 +180,20 @@ class DeepSeekSettings:
         из настроек. Тайм-ауты не влияют на содержимое ответа; DPI хранится
         отдельно в схеме рендеринга страницы, поэтому этих полей здесь нет.
         """
-        return {
+        identity = {
             "provider": "deepseek-direct", "base_url": self.base_url,
             "model": self.model, "temperature": 0, "max_tokens": self.max_tokens,
             "thinking": "disabled" if stage == "ocr" else self.classification_thinking,
             "response_format": {"type": "json_object"},
         }
+        free = [
+            {"provider": provider.name, "base_url": provider.base_url, "model": model}
+            for provider in self.free_providers
+            if (model := provider.model_for(stage))
+        ]
+        if free:
+            identity["free_providers"] = free
+        return identity
 
 
 class ProviderError(RuntimeError):
@@ -119,140 +205,182 @@ class PaidCallsBlocked(ProviderError):
 
 
 class DeepSeekClient:
-    """Одна HTTP-сессия и общий журнал попыток для обоих AI-этапов.
-
-    counter хранит число попыток по этапам, attempts — их длительность,
-    статус и доступный usage. Это журнал текущего клиента, а не история
-    кэшей. Ошибка авторизации/баланса сохраняет blocked: следующие запросы
-    отклоняются до HTTP. Пайплайн закрывает сессию через close.
-    """
+    """Общий транспорт OCR и классификации с последовательным fallback."""
 
     def __init__(self, settings, *, session=None, counter=None):
-        """Сохранить настройки и счётчик; создать сессию без HTTP-повторов.
-
-        Переданный session позволяет подменять транспорт в локальных тестах;
-        его адаптеры не перенастраиваются. Без counter создаётся новый счётчик.
-        """
         self.settings = settings
-        self.session = session or requests.Session()
+        self.session = session if session is not None else requests.Session()
         if session is None:
             self.session.mount("https://", HTTPAdapter(max_retries=0))
-        self.counter = counter or AIRequestCounter()
+        self.counter = counter if counter is not None else AIRequestCounter()
         self.attempts = []
         self.blocked = None
+        self._disabled = set()
+        self._cooldown_until = {}
 
     def close(self):
-        """Закрыть HTTP-сессию, включая явно переданную при создании клиента."""
         self.session.close()
 
     def request_json(self, messages, *, stage, debug_dir):
-        """Отправить один chat/completions запрос и вернуть JSON-объект content.
-
-        messages — готовые сообщения с текстом/изображениями; stage задаёт
-        ocr или classification. Сериализация запроса и начальная запись
-        диагностики выполняются до увеличения счётчика. Затем учитывается
-        каждая HTTP-попытка, включая ошибку и тайм-аут, без скрытых повторов.
-
-        debug_dir получает журнал попытки и ответ API без секретного ключа.
-        HTTP-успех требует непустого JSON content и finish_reason=stop;
-        статус RECEIVED ещё не подтверждает схему или точность задач.
-        Их проверяет вызывающий этап перед записью своего кэша.
-
-        PaidCallsBlocked означает отсутствующий ключ либо HTTP 401/402/403
-        и блокирует следующие вызовы. ProviderError означает ошибку сети,
-        HTTP или ответа. Неверный stage/несериализуемый запрос и ошибки
-        записи диагностики также распространяются, не маскируясь успехом.
-        """
         if stage not in {"ocr", "classification"}:
             raise ValueError("Неизвестный этап AI")
+
+        for provider in self.settings.free_providers:
+            model = provider.model_for(stage)
+            if not model or provider.name in self._disabled:
+                continue
+            if time.monotonic() < self._cooldown_until.get(provider.name, 0):
+                continue
+
+            try:
+                return self._request_once(
+                    messages,
+                    stage=stage,
+                    debug_dir=debug_dir,
+                    provider=provider.name,
+                    base_url=provider.base_url,
+                    model=model,
+                    api_key=provider.api_key,
+                )
+            except ProviderError:
+                # Причина уже сохранена в журнале HTTP-попытки.
+                continue
+
         if self.blocked:
             raise PaidCallsBlocked(self.blocked)
         if not self.settings.api_key:
             self.blocked = "Не задан DEEPSEEK_API_KEY; платные запросы не отправлялись"
             raise PaidCallsBlocked(self.blocked)
-        identity = self.settings.identity(stage)
+
+        return self._request_once(
+            messages,
+            stage=stage,
+            debug_dir=debug_dir,
+            provider="deepseek-direct",
+            base_url=self.settings.base_url,
+            model=self.settings.model,
+            api_key=self.settings.api_key,
+        )
+
+    def _request_once(
+        self, messages, *, stage, debug_dir, provider, base_url, model, api_key
+    ):
+        paid = provider == "deepseek-direct"
+        token_field = "max_completion_tokens" if provider == "groq" else "max_tokens"
         payload = {
-            "model": self.settings.model, "messages": messages,
-            "thinking": {"type": identity["thinking"]}, "temperature": 0,
-            "response_format": {"type": "json_object"},
-            "max_tokens": self.settings.max_tokens, "stream": False,
+            "model": model,
+            "messages": messages,
+            "temperature": 0,
+            token_field: self.settings.max_tokens,
+            "stream": False,
         }
-        # Сериализация до счётчика: ошибка подготовки не считается HTTP-попыткой.
+        if provider != "nvidia-nim":
+            payload["response_format"] = {"type": "json_object"}
+        if paid:
+            thinking = (
+                "disabled" if stage == "ocr" else self.settings.classification_thinking
+            )
+            payload["thinking"] = {"type": thinking}
+
         json.dumps(payload, ensure_ascii=False)
         debug_dir = Path(debug_dir)
         debug_dir.mkdir(parents=True, exist_ok=True)
         attempt = {
-            "attempt": len(self.attempts) + 1, "stage": stage,
+            "attempt": len(self.attempts) + 1,
+            "stage": stage,
             "started_at": datetime.now(timezone.utc).isoformat(),
-            "provider": identity["provider"], "model": self.settings.model,
-            "status": "STARTED", "usage": None, "cost": None,
+            "provider": provider,
+            "model": model,
+            "status": "STARTED",
+            "usage": None,
+            "cost": None,
         }
-        atomic_json(debug_dir / f"attempt_{attempt['attempt']:03d}_{stage}.json", attempt)
+        suffix = f"{attempt['attempt']:03d}_{stage}.json"
+        attempt_path = debug_dir / f"attempt_{suffix}"
+        atomic_json(attempt_path, attempt)
         self.attempts.append(attempt)
         setattr(self.counter, stage, getattr(self.counter, stage) + 1)
         started = time.monotonic()
+
         try:
             response = self.session.post(
-                self.settings.base_url + "/chat/completions",
-                headers={"Authorization": "Bearer " + self.settings.api_key,
-                         "Accept": "application/json"},
-                json=payload, timeout=(self.settings.connect_timeout, self.settings.read_timeout),
+                base_url + "/chat/completions",
+                headers={"Authorization": "Bearer " + api_key, "Accept": "application/json"},
+                json=payload,
+                timeout=(self.settings.connect_timeout, self.settings.read_timeout),
                 allow_redirects=False,
             )
-            attempt["http_status"] = response.status_code
-            if response.status_code in {401, 402, 403}:
-                self.blocked = f"DeepSeek HTTP {response.status_code}: проверьте ключ, доступ и баланс; пакет остановлен"
+            status = response.status_code
+            attempt["http_status"] = status
+
+            if status in {401, 402, 403}:
+                if paid:
+                    self.blocked = f"DeepSeek HTTP {status}: проверьте ключ, доступ и баланс"
+                else:
+                    self._disabled.add(provider)
+            elif not paid and (status in {408, 429} or 500 <= status < 600):
+                self._cooldown_until[provider] = (
+                    time.monotonic() + _retry_delay(response.headers)
+                )
+
             try:
                 body = response.json()
             except ValueError as error:
-                if self.blocked:
+                if paid and self.blocked:
                     raise PaidCallsBlocked(self.blocked) from error
-                raise ProviderError(f"DeepSeek HTTP {response.status_code}: ответ не JSON") from error
-            # Сохраняем только ответ, никогда запрос с Authorization/base64.
-            raw = json.dumps(body, ensure_ascii=False).replace(self.settings.api_key, "[REDACTED]")
-            atomic_json(debug_dir / f"response_{attempt['attempt']:03d}_{stage}.json", json.loads(raw))
+                raise ProviderError(f"{provider} HTTP {status}: ответ не JSON") from error
+
+            atomic_json(debug_dir / f"response_{suffix}", _redact(body, api_key))
             if isinstance(body, dict):
                 attempt["usage"] = numeric_usage(body.get("usage"))
-            if self.blocked:
+            if paid and self.blocked:
                 raise PaidCallsBlocked(self.blocked)
-            if not 200 <= response.status_code < 300:
-                raise ProviderError(f"DeepSeek HTTP {response.status_code}; автоматического повтора нет")
-            if not isinstance(body, dict) or not isinstance(body.get("choices"), list) or len(body["choices"]) != 1:
-                raise ProviderError("DeepSeek: нужен один choices в ответе")
-            choice = body["choices"][0]
+            if not 200 <= status < 300:
+                raise ProviderError(f"{provider} HTTP {status}")
+
+            choices = body.get("choices") if isinstance(body, dict) else None
+            if not isinstance(choices, list) or len(choices) != 1:
+                raise ProviderError(f"{provider}: нужен один элемент в choices")
+            choice = choices[0]
             if not isinstance(choice, dict):
-                raise ProviderError("DeepSeek: неверная структура choices")
+                raise ProviderError(f"{provider}: неверная структура choices")
+
             reason = choice.get("finish_reason")
-            reason = reason if isinstance(reason, str) and reason in {
-                "stop", "length", "content_filter", "tool_calls", "insufficient_system_resource",
-            } else "unknown"
+            allowed = {
+                "stop", "length", "content_filter", "tool_calls",
+                "insufficient_system_resource",
+            }
+            reason = reason if isinstance(reason, str) and reason in allowed else "unknown"
             attempt["finish_reason"] = reason
             if reason != "stop":
-                raise ProviderError(f"DeepSeek: неполный ответ, finish_reason={reason}")
+                raise ProviderError(f"{provider}: неполный ответ, finish_reason={reason}")
+
             message = choice.get("message")
             content = message.get("content") if isinstance(message, dict) else None
             if not isinstance(content, str) or not content.strip():
-                raise ProviderError("DeepSeek: пустой content")
+                raise ProviderError(f"{provider}: пустой content")
             try:
                 data = json.loads(content)
             except ValueError as error:
-                raise ProviderError("DeepSeek: content не является валидным JSON") from error
+                raise ProviderError(f"{provider}: content не является валидным JSON") from error
             if not isinstance(data, dict):
-                raise ProviderError("DeepSeek: корень JSON должен быть объектом")
+                raise ProviderError(f"{provider}: корень JSON должен быть объектом")
+
             attempt["status"] = "RECEIVED"
             return data
         except requests.RequestException as error:
+            if not paid and isinstance(error, (requests.Timeout, requests.ConnectionError)):
+                self._cooldown_until[provider] = time.monotonic() + 60
             attempt["status"] = "FAILED"
             attempt["error"] = type(error).__name__
-            raise ProviderError(f"DeepSeek: {type(error).__name__}; автоматического повтора нет") from error
+            raise ProviderError(f"{provider}: {type(error).__name__}") from error
         except Exception as error:
             attempt["status"] = "FAILED"
-            attempt["error"] = str(error).replace(self.settings.api_key, "[REDACTED]")
+            attempt["error"] = _redact(str(error), api_key)
             raise
         finally:
             attempt["seconds"] = round(time.monotonic() - started, 3)
-            atomic_json(debug_dir / f"attempt_{attempt['attempt']:03d}_{stage}.json", attempt)
-
+            atomic_json(attempt_path, attempt)
 
 def numeric_usage(value):
     """Вернуть известные неотрицательные целые счётчики токенов или None.
