@@ -108,6 +108,65 @@ def test_cold_pages_then_zero_calls_and_b1_c1_have_distinct_numbers(context, sou
     assert len(client.calls) == 2
 
 
+@pytest.mark.parametrize("location", ["root", "fragment", "both"])
+def test_extra_keys_are_ignored_before_assembly_and_cache_round_trip(context, sources, client, location):
+    response = client.responses[1]
+    if location in {"root", "both"}:
+        response["explanation"] = {"confidence": 0.9}
+    if location in {"fragment", "both"}:
+        response["tasks"][0].update(explanation="Комментарий модели", task_num=999, original_label="C99")
+    original = copy.deepcopy(response)
+    validated = variant_ocr.validate_page(response, 1, ["B1", "B2"], sources["source_labels"])
+    assert set(validated) == {"page_num", "tasks", "answers", "issues"}
+    assert validated["tasks"][0] == {
+        "source_label": "B1", "original_label": "B1", "condition": "Условие B1: $x^2 + 1$.",
+        "continuation": False,
+    }
+    cold = recognize(context, sources, client)
+    client.failure_on_page = 1
+    assert recognize(context, sources, client) == cold
+    assert len(client.calls) == 2 and response == original
+    assert [(task["source_label"], task["task_num"]) for task in cold["tasks"]] == [
+        ("B1", 1), ("B2", 2), ("C1", 3), ("C2", 4),
+    ]
+    cached = json.loads((context.cache_dir / "ocr" / "page_001.json").read_text())["response"]
+    assert set(cached) == {"page_num", "tasks", "answers", "issues"}
+    assert set(cached["tasks"][0]) == {"source_label", "condition", "continuation"}
+
+
+@pytest.mark.parametrize("location,field", [
+    ("root", "page_num"), ("root", "tasks"), ("root", "answers"), ("root", "issues"),
+    ("fragment", "source_label"), ("fragment", "condition"), ("fragment", "continuation"),
+])
+def test_extra_keys_cannot_replace_missing_required_ocr_fields(location, field):
+    response = page_response(1, ["B1"])
+    response["explanation"] = "Комментарий модели"
+    response["tasks"][0]["explanation"] = "Комментарий модели"
+    target = response if location == "root" else response["tasks"][0]
+    del target[field]
+    with pytest.raises(ValueError, match="нужны|структура фрагмента"):
+        variant_ocr.validate_page(response, 1, ["B1"], ["B1"])
+
+
+@pytest.mark.parametrize("location,field,value,error", [
+    ("root", "page_num", True, "номер страницы"),
+    ("root", "tasks", {}, "tasks/answers"),
+    ("root", "answers", [], "tasks/answers"),
+    ("root", "issues", [1], "списком строк"),
+    ("fragment", "source_label", 1, "должна быть строкой"),
+    ("fragment", "condition", 1, "условие"),
+    ("fragment", "continuation", 0, "должен быть bool"),
+])
+def test_extra_keys_do_not_weaken_ocr_field_types(location, field, value, error):
+    response = page_response(1, ["B1"])
+    response["explanation"] = "Комментарий модели"
+    response["tasks"][0]["explanation"] = "Комментарий модели"
+    target = response if location == "root" else response["tasks"][0]
+    target[field] = value
+    with pytest.raises(ValueError, match=error):
+        variant_ocr.validate_page(response, 1, ["B1"], ["B1"])
+
+
 def test_continuation_fragments_preserved_on_next_page(context, tmp_path):
     labels = [["B1"], ["C1"]]
     sources = {"pdf_path": make_pdf(tmp_path / "continued.pdf", labels),
@@ -183,7 +242,7 @@ def test_incompatible_page_cache_never_accepted(context, sources, client, tmp_pa
     else:
         client.settings.dpi = 96
     recognize(context, sources, client)
-    assert len(client.calls) == 4
+    assert len(client.calls) == (2 if change in {"variant", "url"} else 4)
 
 
 def test_answer_image_hash_invalidates_last_page_only(context, sources, client, tmp_path):
@@ -196,6 +255,38 @@ def test_answer_image_hash_invalidates_last_page_only(context, sources, client, 
         image.write_bytes(page.get_pixmap().tobytes("png"))
     recognize(context, sources, client)
     assert [call["page_num"] for call in client.calls] == [1, 2, 2]
+
+
+def test_identical_model_images_are_reused_in_current_variant(context, sources, client, tmp_path):
+    first = recognize(context, sources, client)
+    current = copy.copy(context)
+    current.variant_key = "ege_2014_trvar40"
+    current.source_url = "https://alexlarin.net/ege/2014/trvar40.html"
+    current.cache_dir = tmp_path / "other-cache"
+    current.debug_dir = tmp_path / "other-debug"
+    client.failure_on_page = 1
+    assert recognize(current, sources, client) == first
+    assert len(client.calls) == 2
+    cached = json.loads((current.cache_dir / "ocr" / "page_001.json").read_text())
+    assert cached["identity"]["variant_key"] == current.variant_key
+    combined = json.loads((current.cache_dir / "conditions.json").read_text())
+    assert combined["variant_key"] == current.variant_key
+
+
+def test_content_ocr_cache_is_validated_before_becoming_current_page(context, sources, client, tmp_path):
+    from alexlarin_parser.io import fingerprint
+
+    first = recognize(context, sources, client)
+    paths = (tmp_path / "input" / "cache" / "model_responses" / "ocr").glob("*.json")
+    path = next(path for path in paths if json.loads(path.read_text())["response"]["page_num"] == 1)
+    cached = json.loads(path.read_text())
+    cached["response"]["tasks"][0]["source_label"] = "C99"
+    cached["response_sha256"] = fingerprint(cached["response"])
+    path.write_text(json.dumps(cached))
+    current = copy.copy(context)
+    current.cache_dir = tmp_path / "other-cache"
+    assert recognize(current, sources, client) == first
+    assert [call["page_num"] for call in client.calls] == [1, 2, 1]
 
 
 def test_timeout_keeps_first_complete_page_then_resumes(context, sources, client):
@@ -226,6 +317,8 @@ def test_failed_changed_pdf_keeps_previous_aggregate(context, sources, client, t
 @pytest.mark.parametrize("invalid", ["missing", "duplicate", "unknown", "empty", "wrong_page", "invented_answer", "orphan_continuation"])
 def test_bad_second_page_not_ready_cache_and_no_hidden_repair(context, sources, client, invalid):
     response = client.responses[2]
+    response["explanation"] = "Дополнительное поле не отменяет проверки меток"
+    response["tasks"][0]["explanation"] = "Комментарий модели"
     if invalid == "missing":
         response["tasks"].pop()
     elif invalid == "duplicate":

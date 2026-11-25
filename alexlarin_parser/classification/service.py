@@ -12,6 +12,7 @@ import re
 
 from alexlarin_parser.io import atomic_json, fingerprint as _variant_fingerprint
 from alexlarin_parser.prompts import load_prompt
+from alexlarin_parser.content_cache import response_cache_path, read_response, write_response
 from .catalogues import allowed_categories, load_catalog, validate_classification
 
 
@@ -19,6 +20,7 @@ VARIANT_RULES_VERSION = "variant-math-descendant-leaves-new-topics-v1"
 # Прежний числовой протокол нужен только для точной проверки старого кэша.
 NUMERIC_VARIANT_PROMPT_VERSION = 'deepseek-numeric-leaves-v2-independent-whitelists'
 NUMERIC_VARIANT_PROMPT = load_prompt("classification_numeric_legacy.txt")
+# Запрашиваемый формат модели; входной валидатор допускает лишние поля.
 NUMERIC_VARIANT_SCHEMA = {
     "type": "object",
     "required": ["tasks"],
@@ -40,8 +42,8 @@ NUMERIC_VARIANT_SCHEMA = {
     },
 }
 
-VARIANT_CACHE_VERSION = 2
-VARIANT_PROMPT_VERSION = "deepseek-namespaced-leaves-v3"
+VARIANT_CACHE_VERSION = 3
+VARIANT_PROMPT_VERSION = "deepseek-namespaced-content-order-v4"
 VARIANT_PROMPT = load_prompt("classification.txt")
 VARIANT_SCHEMA = {
     **NUMERIC_VARIANT_SCHEMA,
@@ -94,6 +96,14 @@ def classify_variant(context, tasks, client, *, exams_path, topics_path, cache_d
     identity условий, справочников, варианта, провайдера и протокола. В нём
     хранятся исходный ответ и проверенные ID. Только проверенный результат
     атомарно заменяет кэш; ошибка не запускает дополнительный запрос.
+    Лишние поля ответа игнорируются при нормализации, исходный ответ в кэше
+    сохраняется целиком. Обязательные поля, типы, номера и ID проверяются.
+
+    При промахе локального кэша проверяется общий кэш входов модели:
+    условия сортируются, номера запроса независимы от исходных task_num.
+    Ключ учитывает весь пакет, справочники, промпт, схему и настройки клиента;
+    результат всегда сопоставляется номерам текущих задач. Старые форматы
+    читаются только при точной прежней identity, с исходной нумерацией ответа.
 
     ValueError означает неверные данные, дерево или ответ модели. Ошибки
     API распространяются вызывающему коду, чтобы он отличал блокировку
@@ -115,9 +125,13 @@ def classify_variant(context, tasks, client, *, exams_path, topics_path, cache_d
     }
     exam_codes = {f"E{i:03d}": row["id"] for i, row in enumerate(exam_leaves, 1)}
     topic_codes = {f"T{i:03d}": row["id"] for i, row in enumerate(topic_leaves, 1)}
+    # Номера и исходные метки принадлежат текущему варианту. Модель получает
+    # одинаковые условия в стабильном порядке с локальными номерами запроса.
+    ordered = sorted(prepared, key=lambda task: task["condition"])
+    current_numbers = {number: task["task_num"] for number, task in enumerate(ordered, 1)}
     payload = {
-        "variant_key": context.variant_key,
-        "tasks": prepared,
+        "tasks": [{"task_num": number, "condition": task["condition"]}
+                  for number, task in enumerate(ordered, 1)],
         "exams": [{"choice": code, "path": row["path"]} for code, row in zip(exam_codes, exam_leaves)],
         "topics": [{"choice": code, "path": row["path"]} for code, row in zip(topic_codes, topic_leaves)],
     }
@@ -142,19 +156,20 @@ def classify_variant(context, tasks, client, *, exams_path, topics_path, cache_d
         **identity, "version": 1, "prompt_version": NUMERIC_VARIANT_PROMPT_VERSION,
         "prompt_sha256": _variant_fingerprint(NUMERIC_VARIANT_PROMPT), "schema": NUMERIC_VARIANT_SCHEMA,
     }
+    previous_identity = {**identity, "version": 2, "prompt_version": "deepseek-namespaced-leaves-v3"}
     cache_root = Path(cache_dir) if cache_dir is not None else Path(context.cache_dir)
     cache_path = cache_root / "classification.json"
     numbers = {item["task_num"] for item in prepared}
 
-    def validate_response(response):
-        """Декодировать E/T-метки и проверить полный набор задач варианта."""
-        if not isinstance(response, dict) or set(response) != {"tasks"}:
-            raise ValueError("Классификация должна содержать только JSON-поле tasks")
+    def validate_response(response, *, task_numbers=numbers):
+        """Игнорировать лишние поля, декодировать E/T и проверить все задачи."""
+        if not isinstance(response, dict) or "tasks" not in response:
+            raise ValueError("Классификация должна содержать JSON-поле tasks")
         if not isinstance(response["tasks"], list):
             raise ValueError("tasks должен быть списком")
         decoded = []
         for item in response["tasks"]:
-            if not isinstance(item, dict) or set(item) != {"task_num", "exams_id", "topics_id"}:
+            if not isinstance(item, dict) or not {"task_num", "exams_id", "topics_id"}.issubset(item):
                 raise ValueError("Неверная структура классификации")
             exam, topic = item["exams_id"], item["topics_id"]
             if isinstance(exam, str):
@@ -166,17 +181,24 @@ def classify_variant(context, tasks, client, *, exams_path, topics_path, cache_d
             elif isinstance(topic, str) and re.fullmatch(r"[ET]\d+", topic):
                 raise ValueError(f"Неизвестная или чужая метка topics: {topic}")
             decoded.append({"task_num": item["task_num"], "exams_id": exam, "topics_id": topic})
-        return validate_classification(decoded, exams, topics, task_numbers=numbers)
+        return validate_classification(decoded, exams, topics, task_numbers=task_numbers)
+
+    def validate_request_response(response):
+        return validate_response(response, task_numbers=set(current_numbers))
+
+    def current_result(response):
+        return {current_numbers[number]: values for number, values in validate_request_response(response).items()}
 
     if cache_path.is_file():
         try:
             cached = json.loads(cache_path.read_text(encoding="utf-8"))
             if (
                 isinstance(cached, dict)
-                and cached.get("identity") in (identity, numeric_identity)
+                and cached.get("identity") in (identity, previous_identity, numeric_identity)
                 and cached.get("fingerprint") == _variant_fingerprint(cached["identity"])
             ):
-                result = validate_response(cached["response"])
+                result = (current_result(cached["response"]) if cached["identity"] == identity else
+                          validate_response(cached["response"]))
                 normalized = validate_classification(cached["tasks"], exams, topics, task_numbers=numbers)
                 if result != normalized or cached.get("requests_used") != 1:
                     raise ValueError("Сохранённая классификация расходится с ответом модели")
@@ -189,9 +211,16 @@ def classify_variant(context, tasks, client, *, exams_path, topics_path, cache_d
         {"role": "system", "content": VARIANT_PROMPT},
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
     ]
-    response = client.request_json(messages, stage="classification", debug_dir=context.debug_dir)
+    content_identity = {key: value for key, value in identity.items()
+                        if key not in {"variant_key", "source_url", "tasks_sha256"}}
+    content_identity["messages_sha256"] = _variant_fingerprint(messages)
+    content_path = response_cache_path(context, "classification", content_identity, cache_dir=cache_dir)
+    response = read_response(content_path, content_identity, validate_request_response)
+    from_content_cache = response is not None
+    if response is None:
+        response = client.request_json(messages, stage="classification", debug_dir=context.debug_dir)
     try:
-        result = validate_response(response)
+        result = current_result(response)
     except (ValueError, TypeError) as error:
         raise ValueError(
             f"{context.variant_key}: классификация не прошла проверку после одного запроса. "
@@ -205,6 +234,10 @@ def classify_variant(context, tasks, client, *, exams_path, topics_path, cache_d
         "response": response,
         "tasks": normalized,
     })
+    if not from_content_cache:
+        write_response(content_path, content_identity, response)
+    else:
+        print(f"{context.variant_key}: классификация по содержимому, новых запросов 0.", flush=True)
     return result
 
 

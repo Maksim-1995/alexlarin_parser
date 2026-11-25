@@ -120,7 +120,6 @@ class FakeClient:
             raise failure
         if stage == "classification":
             payload = json.loads(messages[1]["content"])
-            assert payload["variant_key"] == key
             return {"tasks": [{"task_num": task["task_num"], "exams_id": 11, "topics_id": 11}
                               for task in payload["tasks"]]}
         label = "B1" if page_number == 1 else "C1"
@@ -326,7 +325,8 @@ def test_paid_block_does_not_stop_recovered_free_provider_in_next_variant(projec
     assert sum(a["provider"] == "deepseek-direct" for a in client.attempts) == bool(paid_status)
 
 
-def test_local_variant40_real_stages_use_free_chain_without_paid_key(tmp_path, monkeypatch):
+@pytest.mark.parametrize("extra_keys", [False, True])
+def test_local_variant40_real_stages_use_free_chain_without_paid_key(tmp_path, monkeypatch, extra_keys):
     """Реальные источники/ответы №40 читаются, все новые файлы — в tmp_path."""
     original = VariantContext.from_url("https://alexlarin.net/ege/2014/trvar40.html", PROJECT_ROOT)
     if not original.source_dir.is_dir() or not (original.cache_dir / "classification.json").is_file():
@@ -336,8 +336,23 @@ def test_local_variant40_real_stages_use_free_chain_without_paid_key(tmp_path, m
     shutil.copytree(PROJECT_ROOT / "data", tmp_path / "data")
     page_responses = [json.loads(path.read_text())["response"]
                       for path in sorted((original.cache_dir / "ocr").glob("page_*.json"))]
-    classification = json.loads((original.cache_dir / "classification.json").read_text())["response"]
+    original_classification = json.loads((original.cache_dir / "classification.json").read_text())
+    classification = original_classification["response"]
+    expected_categories = {task["task_num"]: (task["exams_id"], task["topics_id"])
+                           for task in original_classification["tasks"]}
+    # Сохранённый ответ использовал номера исходного варианта. Подставной
+    # транспорт нового запроса возвращает номера стабильного порядка условий.
+    original_tasks = json.loads((original.cache_dir / "conditions.json").read_text())["tasks"]
+    request_numbers = {task["task_num"]: number for number, task in
+                       enumerate(sorted(original_tasks, key=lambda task: task["condition"]), 1)}
+    for task in classification["tasks"]:
+        task["task_num"] = request_numbers[task["task_num"]]
     assert len(page_responses) == 3
+    if extra_keys:
+        for data in [*page_responses, classification]:
+            data["explanation"] = "Дополнительное поле корня"
+            for task in data["tasks"]:
+                task["explanation"] = "Дополнительное поле задачи"
     # Создание настоящего клиента остаётся в run_batch → from_env.
     monkeypatch.setattr(provider.os, "environ", {
         "DEEPSEEK_API_KEY": "", "OCR_DPI": "72",
@@ -359,10 +374,33 @@ def test_local_variant40_real_stages_use_free_chain_without_paid_key(tmp_path, m
     ocr_content = session.post.call_args_list[0].kwargs["json"]["messages"][0]["content"]
     assert any(part["type"] == "image_url" for part in ocr_content)
     payload = json.loads(session.post.call_args_list[-1].kwargs["json"]["messages"][1]["content"])
-    assert payload["variant_key"] == "ege_2014_trvar40" and len(payload["tasks"]) == 20
+    assert "variant_key" not in payload and len(payload["tasks"]) == 20
+    assert all("source_label" not in task for task in payload["tasks"])
     rows, about = read_workbook(context)
     assert len(rows) == 21 and about["year"] == 2014 and about["source_url"] == original.source_url
+    assert [row[5:7] for row in rows[1:]] == [expected_categories[number] for number in range(1, 21)]
     session.close.assert_called_once()
+
+
+def test_local_variant40_old_caches_remain_usable_without_http(tmp_path):
+    original = VariantContext.from_url("https://alexlarin.net/ege/2014/trvar40.html", PROJECT_ROOT)
+    if not original.source_dir.is_dir() or not (original.cache_dir / "classification.json").is_file():
+        pytest.skip("Локальные источники и сохранённые ответы №40 отсутствуют")
+    context = VariantContext.from_url(original.source_url, tmp_path)
+    shutil.copytree(original.source_dir, context.source_dir)
+    shutil.copytree(original.cache_dir, context.cache_dir)
+    shutil.copytree(PROJECT_ROOT / "data", tmp_path / "data")
+    checked = [context.cache_dir / "classification.json", *(context.cache_dir / "ocr").glob("page_*.json")]
+    before = {path: path.read_bytes() for path in checked}
+    session = Mock()
+    session.post.side_effect = AssertionError("Совместимые старые кэши не требуют HTTP")
+    client = provider.DeepSeekClient(DeepSeekSettings(api_key=""), session=session)
+    report = run_batch(tmp_path, [context], client=client, local_only=True)
+    assert report["variants"][0]["error"] is None
+    assert report["variants"][0]["task_count"] == 20
+    assert (report["ocr_calls"], report["classification_calls"]) == (0, 0)
+    session.post.assert_not_called()
+    assert all(path.read_bytes() == data for path, data in before.items())
 
 
 def test_invalid_catalogue_blocks_before_sources_or_paid_api(project, monkeypatch):

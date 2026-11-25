@@ -6,6 +6,7 @@ import pymupdf
 
 from ..io import atomic_json, file_sha256, fingerprint, read_json
 from ..prompts import load_prompt
+from ..content_cache import response_cache_path, read_response, write_response
 from ..sources.parsing import normalize_label
 from .rendering import _image_part, render_scheme
 
@@ -28,8 +29,10 @@ def validate_page(data, page_num, expected_labels, all_labels, previous_label=No
     Поле answers допускается только при приложенном изображении опубликованных
     ответов. Его метки относятся ко всему варианту, а не только этой странице.
     Пустой опубликованный ответ становится замечанием для проверки.
+    Дополнительные поля корня и фрагментов игнорируются; обязательные поля,
+    их типы и связи задач проверяются до нормализации.
     """
-    if not isinstance(data, dict) or set(data) != {"page_num", "tasks", "answers", "issues"}:
+    if not isinstance(data, dict) or not {"page_num", "tasks", "answers", "issues"}.issubset(data):
         raise ValueError("OCR: нужны page_num, tasks, answers и issues")
     if type(data["page_num"]) is not int or data["page_num"] != page_num:
         raise ValueError("OCR: неверный номер страницы")
@@ -41,7 +44,7 @@ def validate_page(data, page_num, expected_labels, all_labels, previous_label=No
     active = previous_label
     seen = set()
     for item in data["tasks"]:
-        if not isinstance(item, dict) or set(item) != {"source_label", "condition", "continuation"}:
+        if not isinstance(item, dict) or not {"source_label", "condition", "continuation"}.issubset(item):
             raise ValueError("OCR: неверная структура фрагмента")
         label = normalize_label(item["source_label"])
         if all_labels and label not in all_labels:
@@ -60,8 +63,8 @@ def validate_page(data, page_num, expected_labels, all_labels, previous_label=No
             starts.append(label)
         active = label
         seen.add(label)
-        fragments.append({**item, "source_label": label, "original_label": item["source_label"],
-                          "condition": condition.strip()})
+        fragments.append({"source_label": label, "original_label": item["source_label"],
+                          "condition": condition.strip(), "continuation": item["continuation"]})
     if expected_labels is not None and starts != expected_labels:
         raise ValueError(f"OCR: начала задач страницы {page_num}: {starts}, ожидались {expected_labels}")
     answers = {}
@@ -166,6 +169,10 @@ def recognize_variant(context, sources, client, *, cache_dir=None, allow_legacy=
     к последней странице. После проверки ответ сохраняется атомарно: ошибка
     следующей страницы не уничтожает уже готовые кэши и прежний общий результат.
 
+    При промахе страницы общий кэш сравнивает хеш фактических сообщений,
+    включая PNG страниц и опубликованных ответов. Совпавший ответ заново
+    проверяется и сохраняется с identity текущего варианта.
+
     ``cache_dir`` изолирует новый AI-прогон от рабочих кэшей. Старый проверенный
     кэш Gemini допускается только для точного варианта 542, при allow_legacy
     и без отдельного cache_dir; происхождение такого результата сохраняется.
@@ -241,13 +248,30 @@ def recognize_variant(context, sources, client, *, cache_dir=None, allow_legacy=
                 for image in attached:
                     content.append({"type": "text", "text": "ОПУБЛИКОВАННЫЕ ОТВЕТЫ (не условия): " + image.name})
                     content.append(_image_part(image.read_bytes()))
-                data = client.request_json([{"role": "user", "content": content}],
-                                           stage="ocr", debug_dir=context.debug_dir)
+                messages = [{"role": "user", "content": content}]
+                content_identity = {
+                    "version": 1, "provider": client.settings.identity("ocr"),
+                    "prompt_version": OCR_PROMPT_VERSION, "schema_version": OCR_SCHEMA_VERSION,
+                    "render": scheme, "all_labels": all_labels,
+                    "messages_sha256": fingerprint(messages),
+                }
+                content_path = response_cache_path(context, "ocr", content_identity, cache_dir=cache_dir)
+
+                def validate_response(response):
+                    return validate_page(response, page_num, expected, all_labels, previous_label,
+                                         has_answer_images=bool(attached))
+
+                data = read_response(content_path, content_identity, validate_response)
+                from_content_cache = data is not None
+                if data is None:
+                    data = client.request_json(messages, stage="ocr", debug_dir=context.debug_dir)
                 result = validate_page(data, page_num, expected, all_labels, previous_label,
                                        has_answer_images=bool(attached))
                 # До этой точки неполный или структурно неверный ответ не
                 # становится готовой страницей для последующего возобновления.
                 atomic_json(path, {"identity": identity, "response": _public_page(result)})
+                if not from_content_cache:
+                    write_response(content_path, content_identity, _public_page(result))
             results.append(result)
             if result["tasks"]:
                 previous_label = result["tasks"][-1]["source_label"]
