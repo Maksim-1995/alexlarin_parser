@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 import re
 import shutil
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 from unittest.mock import Mock
 from zipfile import ZipFile
 
@@ -358,6 +360,7 @@ def test_local_variant40_real_stages_use_free_chain_without_paid_key(tmp_path, m
         "DEEPSEEK_API_KEY": "", "OCR_DPI": "72",
         "GEMINI_API_KEY": "test-free-key", "GEMINI_OCR_MODEL": "test-vision",
         "NVIDIA_API_KEY": "test-nvidia-key", "NVIDIA_CLASSIFICATION_MODEL": "test-text",
+        "GEMINI_RPM": "3", "GEMINI_RPD": "3", "NVIDIA_RPM": "1", "NVIDIA_RPD": "1",
     })
     session = Mock()
     session.post.side_effect = [completion(data) for data in [*page_responses, classification]]
@@ -370,6 +373,8 @@ def test_local_variant40_real_stages_use_free_chain_without_paid_key(tmp_path, m
     assert (report["ocr_calls"], report["classification_calls"]) == (3, 1)
     assert [a["provider"] for a in state["attempts"]] == ["gemini"] * 3 + ["nvidia-nim"]
     assert session.post.call_count == 4
+    quotas = json.loads((tmp_path / "input" / "cache" / "provider_quotas.json").read_text())
+    assert sorted(len(record["requests"]) for record in quotas["providers"].values()) == [1, 3]
     assert all("thinking" not in call.kwargs["json"] for call in session.post.call_args_list)
     ocr_content = session.post.call_args_list[0].kwargs["json"]["messages"][0]["content"]
     assert any(part["type"] == "image_url" for part in ocr_content)
@@ -394,13 +399,73 @@ def test_local_variant40_old_caches_remain_usable_without_http(tmp_path):
     before = {path: path.read_bytes() for path in checked}
     session = Mock()
     session.post.side_effect = AssertionError("Совместимые старые кэши не требуют HTTP")
-    client = provider.DeepSeekClient(DeepSeekSettings(api_key=""), session=session)
+    quota_path = tmp_path / "input" / "cache" / "provider_quotas.json"
+    client = provider.DeepSeekClient(DeepSeekSettings(
+        api_key="", rate_limits=(provider.ProviderLimits("deepseek-direct", rpm=1, rpd=1),),
+        rate_limit_path=quota_path,
+    ), session=session)
     report = run_batch(tmp_path, [context], client=client, local_only=True)
     assert report["variants"][0]["error"] is None
     assert report["variants"][0]["task_count"] == 20
     assert (report["ocr_calls"], report["classification_calls"]) == (0, 0)
     session.post.assert_not_called()
+    assert not quota_path.exists()
     assert all(path.read_bytes() == data for path, data in before.items())
+
+
+def test_classification_results_keep_variant_and_task_binding_when_completed_in_reverse(project):
+    base, contexts, _ = project
+    first_waiting, second_done = Event(), Event()
+    completed = []
+
+    class OutOfOrderSession:
+        def __init__(self, index):
+            self.index = index
+
+        def post(self, url, **kwargs):
+            if self.index == 0:
+                first_waiting.set()
+                assert second_done.wait(timeout=3)
+            return completion({"tasks": [{"task_num": number, "exams_id": 10 + number, "topics_id": 10 + number}
+                                          for number in (2, 1)]})
+
+    settings = DeepSeekSettings(
+        api_key="test-shared-key", rate_limits=(provider.ProviderLimits("deepseek-direct", rpm=2, rpd=2),),
+        rate_limit_path=base / "input" / "cache" / "provider_quotas.json",
+    )
+    clients = [provider.DeepSeekClient(settings, session=OutOfOrderSession(index)) for index in range(2)]
+    tasks = [
+        [{"task_num": 1, "source_label": "B1", "condition": "Явное условие первого варианта"},
+         {"task_num": 2, "source_label": "C1", "condition": "Алгебра первого варианта"}],
+        [{"task_num": 1, "source_label": "B9", "condition": "Алгебра второго варианта"},
+         {"task_num": 2, "source_label": "C6", "condition": "Явное условие второго варианта"}],
+    ]
+
+    def classify(index):
+        if index == 1:
+            assert first_waiting.wait(timeout=3)
+        result = pipeline.classify_variant(
+            contexts[index], tasks[index], clients[index],
+            exams_path=base / "data" / "exams.csv", topics_path=base / "data" / "topics.csv",
+        )
+        completed.append(index)
+        if index == 1:
+            second_done.set()
+        return result
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(classify, index) for index in range(2)]
+        results = [future.result(timeout=5) for future in futures]
+    assert completed == [1, 0]
+    assert results == [
+        {1: {"exams_id": 12, "topics_id": 12}, 2: {"exams_id": 11, "topics_id": 11}},
+        {1: {"exams_id": 11, "topics_id": 11}, 2: {"exams_id": 12, "topics_id": 12}},
+    ]
+    assert sum(client.counter.total for client in clients) == 2
+    for context, result in zip(contexts, results):
+        cached = json.loads((context.cache_dir / "classification.json").read_text())
+        assert cached["identity"]["variant_key"] == context.variant_key
+        assert cached["tasks"] == [{"task_num": number, **result[number]} for number in (1, 2)]
 
 
 def test_invalid_catalogue_blocks_before_sources_or_paid_api(project, monkeypatch):

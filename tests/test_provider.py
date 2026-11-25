@@ -8,6 +8,9 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
+from dataclasses import replace
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 
 import pytest
 import requests
@@ -15,6 +18,7 @@ import requests
 from ai_requests import AIRequestCounter
 from provider import DeepSeekClient, DeepSeekSettings, PaidCallsBlocked, ProviderError, load_env, usage_summary
 from alexlarin_parser import provider
+from alexlarin_parser.rate_limits import ProviderLimits, RequestRateLimiter
 
 
 TEST_KEY = "unit-test-not-a-real-api-key"
@@ -374,3 +378,189 @@ def test_openrouter_accepts_only_explicit_free_models(tmp_path, chain_settings, 
     else:
         settings = DeepSeekSettings.from_env(tmp_path)
         assert settings.free_providers[-1].ocr_model == model
+
+
+@pytest.mark.parametrize("limit", ["RPM", "RPD"])
+def test_configured_provider_quota_blocks_http_before_attempt_counter(tmp_path, monkeypatch, limit):
+    monkeypatch.setattr(os, "environ", {"DEEPSEEK_API_KEY": TEST_KEY, f"DEEPSEEK_{limit}": "1"})
+    session = FakeSession(FakeResponse(), FakeResponse())
+    client = DeepSeekClient(DeepSeekSettings.from_env(tmp_path), session=session)
+    client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path / "debug")
+    with pytest.raises(ProviderError, match=limit):
+        client.request_json(MESSAGES, stage="classification", debug_dir=tmp_path / "debug")
+    assert len(session.calls) == client.counter.total == len(client.attempts) == 1
+    assert client.counter.classification == 0
+
+
+@pytest.mark.parametrize("kind,window", [("rpm", 60), ("rpd", 86400)])
+def test_quota_reopens_only_at_rolling_window_boundary(tmp_path, kind, window):
+    now = [100000.0]
+    settings = DeepSeekSettings(api_key=TEST_KEY, rate_limits=(ProviderLimits("deepseek-direct", **{kind: 1}),))
+    session = FakeSession(FakeResponse(), FakeResponse())
+    client = DeepSeekClient(settings, session=session, rate_limiter=RequestRateLimiter(clock=lambda: now[0]))
+    client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)
+    now[0] += window - 0.01
+    with pytest.raises(provider.RateLimitBlocked, match=kind.upper()):
+        client.request_json(MESSAGES, stage="classification", debug_dir=tmp_path)
+    now[0] += 0.01
+    client.request_json(MESSAGES, stage="classification", debug_dir=tmp_path)
+    assert len(session.calls) == client.counter.total == 2
+
+
+def test_daily_budget_still_blocks_after_minute_budget_recovers(tmp_path):
+    now = [100000.0]
+    settings = DeepSeekSettings(api_key=TEST_KEY, rate_limits=(ProviderLimits("deepseek-direct", rpm=1, rpd=2),))
+    session = FakeSession(FakeResponse(), FakeResponse(), FakeResponse())
+    client = DeepSeekClient(settings, session=session, rate_limiter=RequestRateLimiter(clock=lambda: now[0]))
+    client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)
+    now[0] += 60
+    client.request_json(MESSAGES, stage="classification", debug_dir=tmp_path)
+    now[0] += 60
+    with pytest.raises(provider.RateLimitBlocked, match="RPD"):
+        client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)
+    now[0] = 186400.0
+    client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)
+    assert len(session.calls) == client.counter.total == 3
+
+
+def test_every_provider_including_paid_tail_has_independent_shared_stage_quota(tmp_path, chain_settings):
+    names = [p.name for p in chain_settings.free_providers] + ["deepseek-direct"]
+    settings = replace(chain_settings, api_key=TEST_KEY,
+                       rate_limits=tuple(ProviderLimits(name, rpm=1, rpd=1) for name in names))
+    session = FakeSession(*[FakeResponse() for _ in names])
+    client = DeepSeekClient(settings, session=session, rate_limiter=RequestRateLimiter(clock=lambda: 100000.0))
+    for stage in ("ocr", "classification", "ocr", "classification", "ocr"):
+        client.request_json(MESSAGES, stage=stage, debug_dir=tmp_path)
+    with pytest.raises(provider.RateLimitBlocked):
+        client.request_json(MESSAGES, stage="classification", debug_dir=tmp_path)
+    assert [a["provider"] for a in client.attempts] == names
+    assert len(session.calls) == client.counter.total == 5
+    assert (client.counter.ocr, client.counter.classification) == (3, 2)
+    assert len(list(tmp_path.glob("attempt_*.json"))) == 5
+
+
+def test_error_fallback_checks_target_provider_budget_too(tmp_path, chain_settings, monkeypatch):
+    now = [100000.0]
+    monkeypatch.setattr(provider.time, "monotonic", lambda: now[0])
+    settings = replace(chain_settings, rate_limits=(ProviderLimits("nvidia-nim", rpd=1),))
+    session = FakeSession(FakeResponse(status=503), FakeResponse(), FakeResponse(status=503), FakeResponse())
+    client = DeepSeekClient(settings, session=session, rate_limiter=RequestRateLimiter(clock=lambda: now[0]))
+    client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)
+    now[0] += 61
+    client.request_json(MESSAGES, stage="classification", debug_dir=tmp_path)
+    assert [a["provider"] for a in client.attempts] == ["gemini", "nvidia-nim", "gemini", "groq"]
+    assert len(session.calls) == client.counter.total == 4
+
+
+@pytest.mark.parametrize("outcome", [requests.Timeout("test timeout"), FakeResponse(status=503)])
+def test_failed_http_attempt_consumes_quota(tmp_path, outcome):
+    settings = DeepSeekSettings(api_key=TEST_KEY, rate_limits=(ProviderLimits("deepseek-direct", rpd=1),))
+    session = FakeSession(outcome)
+    client = DeepSeekClient(settings, session=session)
+    with pytest.raises(ProviderError):
+        client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)
+    with pytest.raises(provider.RateLimitBlocked, match="RPD"):
+        client.request_json(MESSAGES, stage="classification", debug_dir=tmp_path)
+    assert len(session.calls) == client.counter.total == 1
+
+
+def test_failed_preparation_does_not_consume_quota(tmp_path, monkeypatch):
+    settings = DeepSeekSettings(api_key=TEST_KEY, rate_limits=(ProviderLimits("deepseek-direct", rpd=1),))
+    client = DeepSeekClient(settings, session=FakeSession(FakeResponse()))
+    with monkeypatch.context() as patch:
+        patch.setattr(provider, "atomic_json", lambda *a, **k: (_ for _ in ()).throw(OSError("нет места")))
+        with pytest.raises(OSError, match="нет места"):
+            client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)
+    assert client.counter.total == 0
+    client.request_json(MESSAGES, stage="classification", debug_dir=tmp_path)
+    assert client.counter.total == 1
+
+
+def test_quota_history_survives_new_client_and_model_change_without_secrets(tmp_path, monkeypatch):
+    monkeypatch.setattr(os, "environ", {"DEEPSEEK_API_KEY": TEST_KEY, "DEEPSEEK_RPD": "1"})
+    settings = DeepSeekSettings.from_env(tmp_path)
+    first = DeepSeekClient(settings, session=FakeSession(FakeResponse()))
+    first.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path / "first")
+    first.close()
+    second_session = FakeSession()
+    second = DeepSeekClient(replace(settings, model="another-model"), session=second_session)
+    with pytest.raises(provider.RateLimitBlocked, match="RPD"):
+        second.request_json(MESSAGES, stage="classification", debug_dir=tmp_path / "second")
+    assert second.counter.total == 0 and not second_session.calls
+    assert TEST_KEY not in settings.rate_limit_path.read_text()
+
+
+def test_same_account_budget_is_atomic_between_clients(tmp_path):
+    settings = DeepSeekSettings(api_key=TEST_KEY, rate_limits=(ProviderLimits("deepseek-direct", rpd=1),),
+                                rate_limit_path=tmp_path / "quotas.json")
+    clients = [DeepSeekClient(settings, session=FakeSession(FakeResponse())) for _ in range(2)]
+    start = Barrier(2)
+
+    def request(index):
+        start.wait(timeout=3)
+        try:
+            return clients[index].request_json(MESSAGES, stage="ocr", debug_dir=tmp_path / str(index))
+        except provider.RateLimitBlocked:
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(request, range(2)))
+    assert results.count({"tasks": []}) == 1 and results.count(None) == 1
+    assert sum(client.counter.total for client in clients) == 1
+
+
+def test_parallel_calls_to_one_client_keep_unique_attempts_and_input_binding(tmp_path):
+    class EchoSession(FakeSession):
+        def post(self, url, **kwargs):
+            self.calls.append({"url": url, **kwargs})
+            return FakeResponse(data=body(content=json.dumps({"task": kwargs["json"]["messages"][0]["content"]})))
+
+    settings = DeepSeekSettings(api_key=TEST_KEY, rate_limits=(ProviderLimits("deepseek-direct", rpd=2),))
+    session = EchoSession()
+    client = DeepSeekClient(settings, session=session)
+
+    def request(index):
+        try:
+            return client.request_json([{"role": "user", "content": str(index)}], stage="ocr", debug_dir=tmp_path)
+        except provider.RateLimitBlocked:
+            return None
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(request, range(4)))
+    assert sum(result is not None for result in results) == 2
+    assert all(result is None or result == {"task": str(index)} for index, result in enumerate(results))
+    assert [a["attempt"] for a in client.attempts] == [1, 2]
+    assert len(session.calls) == client.counter.total == 2
+
+
+@pytest.mark.parametrize("prefix", ["GEMINI", "NVIDIA", "GROQ", "OPENROUTER", "DEEPSEEK"])
+@pytest.mark.parametrize("kind", ["RPM", "RPD"])
+@pytest.mark.parametrize("value", ["0", "-1", "1.5", "invalid"])
+def test_invalid_limit_configuration_is_rejected(tmp_path, monkeypatch, prefix, kind, value):
+    monkeypatch.setattr(os, "environ", {f"{prefix}_{kind}": value})
+    with pytest.raises(ValueError, match="положительное целое число"):
+        DeepSeekSettings.from_env(tmp_path)
+
+
+def test_limits_for_all_providers_are_loaded_without_changing_cache_identity(tmp_path, monkeypatch):
+    monkeypatch.setattr(os, "environ", {})
+    initial = DeepSeekSettings.from_env(tmp_path)
+    names = ("gemini", "nvidia-nim", "groq", "openrouter", "deepseek-direct")
+    for index, prefix in enumerate(("GEMINI", "NVIDIA", "GROQ", "OPENROUTER", "DEEPSEEK"), 1):
+        monkeypatch.setenv(f"{prefix}_RPM", str(index))
+        monkeypatch.setenv(f"{prefix}_RPD", str(index * 10))
+    settings = DeepSeekSettings.from_env(tmp_path)
+    assert settings.rate_limits == tuple(ProviderLimits(name, rpm=i, rpd=i * 10) for i, name in enumerate(names, 1))
+    assert all(settings.identity(stage) == initial.identity(stage) for stage in ("ocr", "classification"))
+    assert not settings.rate_limit_path.exists()
+
+
+def test_corrupt_quota_ledger_does_not_allow_http(tmp_path, monkeypatch):
+    monkeypatch.setattr(os, "environ", {"DEEPSEEK_API_KEY": TEST_KEY, "DEEPSEEK_RPD": "1"})
+    settings = DeepSeekSettings.from_env(tmp_path)
+    settings.rate_limit_path.parent.mkdir(parents=True)
+    settings.rate_limit_path.write_text("{truncated")
+    client = DeepSeekClient(settings, session=FakeSession())
+    with pytest.raises(ValueError, match="Журнал квот повреждён"):
+        client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path / "debug")
+    assert client.counter.total == 0 and not client.attempts

@@ -1,7 +1,7 @@
-"""Общий прямой DeepSeek-транспорт для OCR и классификации.
+"""Последовательная цепочка провайдеров OCR и классификации.
 
-Клиент отвечает за единственную HTTP-попытку, проверку оболочки ответа
-и учёт вызовов. Проверка схем задач, кэши и решение о возобновлении остаются
+Клиент проверяет квоты перед каждой HTTP-попыткой, оболочку ответа
+и учитывает вызовы. Проверка схем задач, кэши и решение о возобновлении остаются
 в вызывающих этапах. Секрет не входит в identity и диагностические файлы.
 """
 
@@ -11,12 +11,14 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Lock
 
 import requests
 from requests.adapters import HTTPAdapter
 
 from .requests_counter import AIRequestCounter
 from .io import atomic_json
+from .rate_limits import ProviderLimits, RequestRateLimiter, QuotaExceeded
 from email.utils import parsedate_to_datetime
 
 
@@ -52,6 +54,23 @@ _FREE_ENDPOINTS = (
     ("groq", "GROQ", "https://api.groq.com/openai/v1"),
     ("openrouter", "OPENROUTER", "https://openrouter.ai/api/v1"),
 )
+
+
+def _load_rate_limits():
+    limits = []
+    prefixes = [(name, prefix) for name, prefix, _ in _FREE_ENDPOINTS]
+    for name, prefix in [*prefixes, ("deepseek-direct", "DEEPSEEK")]:
+        values = {}
+        for kind in ("RPM", "RPD"):
+            value = os.environ.get(f"{prefix}_{kind}", "").strip()
+            if value:
+                try:
+                    values[kind.lower()] = int(value)
+                except ValueError as error:
+                    raise ValueError(f"{prefix}_{kind}: нужно положительное целое число") from error
+        if values:
+            limits.append(ProviderLimits(name, **values))
+    return tuple(limits)
 
 
 @dataclass(frozen=True)
@@ -139,6 +158,8 @@ class DeepSeekSettings:
     max_tokens: int = 16384
     dpi: int = 300
     free_providers: tuple[_FreeProvider, ...] = ()
+    rate_limits: tuple[ProviderLimits, ...] = ()
+    rate_limit_path: Path | None = None
 
 
     def __post_init__(self):
@@ -149,10 +170,13 @@ class DeepSeekSettings:
             raise ValueError("Тайм-ауты, DPI и max_tokens должны быть положительными")
         if not self.base_url.startswith("https://"):
             raise ValueError("DEEPSEEK_BASE_URL должен использовать HTTPS")
+        names = [limit.provider for limit in self.rate_limits]
+        if len(names) != len(set(names)) or set(names) - {"deepseek-direct", *(p[0] for p in _FREE_ENDPOINTS)}:
+            raise ValueError("Квоты должны задаваться один раз для каждого известного провайдера")
 
     @classmethod
     def from_env(cls, base_dir=None):
-        """Собрать настройки DEEPSEEK_* и OCR_DPI без обращения к API.
+        """Собрать настройки транспорта, провайдеров и квот без обращения к API.
 
         Если base_dir задан, сначала прочитать его .env через load_env;
         существующие переменные окружения сохраняют приоритет. Неверные
@@ -160,6 +184,7 @@ class DeepSeekSettings:
         """
         if base_dir is not None:
             load_env(Path(base_dir) / ".env")
+        rate_limits = _load_rate_limits()
         return cls(
             api_key=os.environ.get("DEEPSEEK_API_KEY", ""),
             base_url=os.environ.get("DEEPSEEK_BASE_URL", cls.base_url).rstrip("/"),
@@ -171,6 +196,9 @@ class DeepSeekSettings:
             max_tokens=int(os.environ.get("DEEPSEEK_MAX_TOKENS", "16384")),
             dpi=int(os.environ.get("OCR_DPI", "300")),
             free_providers=_load_free_providers(),
+            rate_limits=rate_limits,
+            rate_limit_path=(Path(base_dir) / "input" / "cache" / "provider_quotas.json"
+                             if base_dir is not None and rate_limits else None),
         )
 
     def identity(self, stage):
@@ -201,13 +229,17 @@ class ProviderError(RuntimeError):
 
 
 class PaidCallsBlocked(ProviderError):
-    """Общая ошибка ключа, доступа или баланса запрещает новые вызовы клиента."""
+    """Блокировка платного DeepSeek; бесплатные провайдеры остаются доступны."""
+
+
+class RateLimitBlocked(ProviderError):
+    """Локальная квота исчерпана; HTTP-попытки и ожидания не было."""
 
 
 class DeepSeekClient:
     """Общий транспорт OCR и классификации с последовательным fallback."""
 
-    def __init__(self, settings, *, session=None, counter=None):
+    def __init__(self, settings, *, session=None, counter=None, rate_limiter=None):
         self.settings = settings
         self.session = session if session is not None else requests.Session()
         if session is None:
@@ -217,14 +249,24 @@ class DeepSeekClient:
         self.blocked = None
         self._disabled = set()
         self._cooldown_until = {}
+        self._request_lock = Lock()
+        self._rate_limiter = rate_limiter if rate_limiter is not None else RequestRateLimiter(settings.rate_limit_path)
 
     def close(self):
-        self.session.close()
+        with self._request_lock:
+            self.session.close()
 
     def request_json(self, messages, *, stage, debug_dir):
+        # Один транспорт/журнал клиента: не допускаем гонок счётчика и сессии,
+        # даже если внешний код вызовет клиент из нескольких потоков.
+        with self._request_lock:
+            return self._request_json(messages, stage=stage, debug_dir=debug_dir)
+
+    def _request_json(self, messages, *, stage, debug_dir):
         if stage not in {"ocr", "classification"}:
             raise ValueError("Неизвестный этап AI")
 
+        quota_errors = []
         for provider in self.settings.free_providers:
             model = provider.model_for(stage)
             if not model or provider.name in self._disabled:
@@ -242,14 +284,21 @@ class DeepSeekClient:
                     model=model,
                     api_key=provider.api_key,
                 )
+            except RateLimitBlocked as error:
+                quota_errors.append(str(error))
+                continue
             except ProviderError:
                 # Причина уже сохранена в журнале HTTP-попытки.
                 continue
 
         if self.blocked:
+            if quota_errors:
+                raise RateLimitBlocked("; ".join([*quota_errors, self.blocked]))
             raise PaidCallsBlocked(self.blocked)
         if not self.settings.api_key:
             self.blocked = "Не задан DEEPSEEK_API_KEY; платные запросы не отправлялись"
+            if quota_errors:
+                raise RateLimitBlocked("; ".join([*quota_errors, self.blocked]))
             raise PaidCallsBlocked(self.blocked)
 
         return self._request_once(
@@ -297,7 +346,12 @@ class DeepSeekClient:
         }
         suffix = f"{attempt['attempt']:03d}_{stage}.json"
         attempt_path = debug_dir / f"attempt_{suffix}"
-        atomic_json(attempt_path, attempt)
+        limits = next((limit for limit in self.settings.rate_limits if limit.provider == provider), ProviderLimits(provider))
+        try:
+            with self._rate_limiter.reserve(limits, base_url=base_url, api_key=api_key):
+                atomic_json(attempt_path, attempt)
+        except QuotaExceeded as error:
+            raise RateLimitBlocked(str(error)) from error
         self.attempts.append(attempt)
         setattr(self.counter, stage, getattr(self.counter, stage) + 1)
         started = time.monotonic()
