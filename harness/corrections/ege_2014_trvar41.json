@@ -1,0 +1,150 @@
+{
+  "version": 4,
+  "variant_key": "ege_2014_trvar41",
+  "source_url": "https://alexlarin.net/ege/2014/trvar41.html",
+  "pdf_sha256": "da0e5c800f068cff5694193189c5400a04ce68935c2339fc388a21eb10ef113b",
+  "corrections": [
+    {
+      "source_label": "C2",
+      "field": "answer",
+      "old": "$2\\arcsin\\left(\\frac{3}{\\sqrt[3]{2}}-1\\right)$",
+      "new": "$2\\arcsin\\left(\\sqrt[3]{2}-1\\right)$",
+      "reason": "В PNG опубликован кубический корень из 2, без дроби и числителя 3. Исправлено искажение OCR без решения задачи.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar41.png",
+        "input/variants/ege_2014_trvar41/source/trvar41.png"
+      ],
+      "method": "published-source-transcription"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) Побеждает второй игрок.\nб) Побеждает второй игрок.\nв) Побеждает второй игрок.",
+      "reason": "Исходная PNG не содержит C6. Ответ перенесён из совпадающей официальной публикации турнира Ломоносова 2009, задача 1 «Горошины»; собственное решение не генерировалось.",
+      "evidence": [
+        "https://olympiads.mccme.ru/turlom/2009/zadanija/tl2009mig-otv_kri.pdf",
+        "https://problems.ru/view_problem_details_new.php?id=115393",
+        "reports/pilot_41/published_sources.json; совпадают правила передачи, запрет повторных количеств и нуля, случаи 2, 3 и N. Общий случай г) публикации соответствует в) варианта; дополнительный случай 10 горошин не переносился."
+      ],
+      "method": "published-source-transcription"
+    },
+    {
+      "source_label": "B3",
+      "field": "topics_id",
+      "old": 522,
+      "new": 174,
+      "reason": "Радиус описанной окружности прямоугольного треугольника задаётся медианой к гипотенузе. Существующий лист 174 точнее тригонометрического решения треугольников 522.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar41.pdf",
+        "reports/pilot_41/evidence/page_002.png",
+        "reports/pilot_41/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-26"
+    },
+    {
+      "source_label": "B4",
+      "field": "topics_id",
+      "old": 141,
+      "new": 18,
+      "reason": "Расчёт рейтинга по таблице с дробным коэффициентом 0,01: существующий арифметический лист точнее общей темы разных методов.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar41.pdf",
+        "reports/pilot_41/evidence/page_002.png",
+        "reports/pilot_41/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-26"
+    },
+    {
+      "source_label": "B6",
+      "field": "topics_id",
+      "old": 509,
+      "new": 494,
+      "reason": "Углы четырёхугольника, вписанного в окружность; существующий лист «Вписанный угол» точнее общих свойств четырёхугольника.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar41.pdf",
+        "reports/pilot_41/evidence/page_002.png",
+        "reports/pilot_41/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-26"
+    },
+    {
+      "source_label": "B9",
+      "field": "topics_id",
+      "old": 659,
+      "new": "Площадь поверхности куба",
+      "reason": "Условие о площади поверхности куба; лист 659 находится внутри ветви сечений многогранников. Точного существующего листа о поверхности куба нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar41.pdf",
+        "reports/pilot_41/evidence/page_002.png",
+        "reports/pilot_41/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-26"
+    },
+    {
+      "source_label": "B12",
+      "field": "topics_id",
+      "old": 257,
+      "new": 476,
+      "reason": "Требуется минимальный угол из ограничения времени не больше 140 с, то есть неравенство в прикладной задаче; не простейшее тригонометрическое уравнение.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar41.pdf",
+        "reports/pilot_41/evidence/page_002.png",
+        "reports/pilot_41/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-26"
+    },
+    {
+      "source_label": "B13",
+      "field": "topics_id",
+      "old": 12,
+      "new": 17,
+      "reason": "Одинаковые пункты отправления и назначения, различное время прибытия: движение с отставанием, а не сближение и удаление.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar41.pdf",
+        "reports/pilot_41/evidence/page_002.png",
+        "reports/pilot_41/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-26"
+    },
+    {
+      "source_label": "C2",
+      "field": "exams_id",
+      "old": 190,
+      "new": 221,
+      "reason": "Конус с вписанным шаром и плоскостью, делящей объём: развёрнутая стереометрическая задача о круглых телах.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar41.pdf",
+        "reports/pilot_41/evidence/page_003.png",
+        "reports/pilot_41/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-26"
+    },
+    {
+      "source_label": "C5",
+      "field": "topics_id",
+      "old": 261,
+      "new": "Область значений тригонометрической функции с параметром",
+      "reason": "Требование к области значений функции, а не тригонометрическое уравнение с параметром. Подходящего конечного листа в полном справочнике нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar41.pdf",
+        "reports/pilot_41/evidence/page_003.png",
+        "reports/pilot_41/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-26"
+    },
+    {
+      "source_label": "C6",
+      "field": "exams_id",
+      "old": 265,
+      "new": 268,
+      "reason": "Сюжетная задача на выигрышную стратегию; существующий конечный лист сюжетных задач точнее общих свойств чисел.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar41.pdf",
+        "reports/pilot_41/evidence/page_003.png",
+        "reports/pilot_41/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-26"
+    }
+  ]
+}

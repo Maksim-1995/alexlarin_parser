@@ -18,7 +18,8 @@ from requests.adapters import HTTPAdapter
 
 from .requests_counter import AIRequestCounter
 from .io import atomic_json
-from .rate_limits import ProviderLimits, RequestRateLimiter, QuotaExceeded
+from .rate_limits import ProviderLimits, RequestRateLimiter, QuotaExceeded, CooldownActive
+from .model_response import ModelResponse
 from email.utils import parsedate_to_datetime
 
 
@@ -198,7 +199,7 @@ class DeepSeekSettings:
             free_providers=_load_free_providers(),
             rate_limits=rate_limits,
             rate_limit_path=(Path(base_dir) / "input" / "cache" / "provider_quotas.json"
-                             if base_dir is not None and rate_limits else None),
+                             if base_dir is not None else None),
         )
 
     def identity(self, stage):
@@ -256,13 +257,19 @@ class DeepSeekClient:
         with self._request_lock:
             self.session.close()
 
-    def request_json(self, messages, *, stage, debug_dir):
+    def request_json(self, messages, *, stage, debug_dir, validate=None):
+        """Вернуть JSON-словарь с provenance фактического провайдера.
+
+        validate проверяет схему этапа до признания ответа успешным. Его
+        ValueError/TypeError фиксируются как ошибка попытки и включают fallback.
+        Поля происхождения находятся в атрибуте ответа, не в JSON-схеме модели.
+        """
         # Один транспорт/журнал клиента: не допускаем гонок счётчика и сессии,
         # даже если внешний код вызовет клиент из нескольких потоков.
         with self._request_lock:
-            return self._request_json(messages, stage=stage, debug_dir=debug_dir)
+            return self._request_json(messages, stage=stage, debug_dir=debug_dir, validate=validate)
 
-    def _request_json(self, messages, *, stage, debug_dir):
+    def _request_json(self, messages, *, stage, debug_dir, validate):
         if stage not in {"ocr", "classification"}:
             raise ValueError("Неизвестный этап AI")
 
@@ -283,6 +290,7 @@ class DeepSeekClient:
                     base_url=provider.base_url,
                     model=model,
                     api_key=provider.api_key,
+                    validate=validate,
                 )
             except RateLimitBlocked as error:
                 quota_errors.append(str(error))
@@ -309,10 +317,11 @@ class DeepSeekClient:
             base_url=self.settings.base_url,
             model=self.settings.model,
             api_key=self.settings.api_key,
+            validate=validate,
         )
 
     def _request_once(
-        self, messages, *, stage, debug_dir, provider, base_url, model, api_key
+        self, messages, *, stage, debug_dir, provider, base_url, model, api_key, validate
     ):
         paid = provider == "deepseek-direct"
         token_field = "max_completion_tokens" if provider == "groq" else "max_tokens"
@@ -349,8 +358,11 @@ class DeepSeekClient:
         limits = next((limit for limit in self.settings.rate_limits if limit.provider == provider), ProviderLimits(provider))
         try:
             with self._rate_limiter.reserve(limits, base_url=base_url, api_key=api_key):
+                remaining = self._cooldown_until.get(provider, 0) - time.monotonic()
+                if remaining > 0:
+                    raise CooldownActive(provider, remaining)
                 atomic_json(attempt_path, attempt)
-        except QuotaExceeded as error:
+        except (QuotaExceeded, CooldownActive) as error:
             raise RateLimitBlocked(str(error)) from error
         self.attempts.append(attempt)
         setattr(self.counter, stage, getattr(self.counter, stage) + 1)
@@ -372,10 +384,12 @@ class DeepSeekClient:
                     self.blocked = f"DeepSeek HTTP {status}: проверьте ключ, доступ и баланс"
                 else:
                     self._disabled.add(provider)
-            elif not paid and (status in {408, 429} or 500 <= status < 600):
+            elif status in {408, 429} or 500 <= status < 600:
+                delay = _retry_delay(response.headers)
                 self._cooldown_until[provider] = (
-                    time.monotonic() + _retry_delay(response.headers)
+                    time.monotonic() + delay
                 )
+                self._rate_limiter.defer(provider, base_url=base_url, api_key=api_key, seconds=delay)
 
             try:
                 body = response.json()
@@ -420,14 +434,25 @@ class DeepSeekClient:
             if not isinstance(data, dict):
                 raise ProviderError(f"{provider}: корень JSON должен быть объектом")
 
+            if validate is not None:
+                try:
+                    validate(data)
+                except (ValueError, TypeError) as error:
+                    raise ProviderError(f"{provider}: ответ не прошёл проверку схемы: {_redact(str(error), api_key)}") from error
+
             attempt["status"] = "RECEIVED"
-            return data
+            return ModelResponse(data, {"provider": provider, "model": model, "base_url": base_url})
         except requests.RequestException as error:
-            if not paid and isinstance(error, (requests.Timeout, requests.ConnectionError)):
+            if isinstance(error, (requests.Timeout, requests.ConnectionError)):
                 self._cooldown_until[provider] = time.monotonic() + 60
+                self._rate_limiter.defer(provider, base_url=base_url, api_key=api_key, seconds=60)
             attempt["status"] = "FAILED"
             attempt["error"] = type(error).__name__
             raise ProviderError(f"{provider}: {type(error).__name__}") from error
+        except KeyboardInterrupt:
+            attempt["status"] = "INTERRUPTED"
+            attempt["error"] = "KeyboardInterrupt"
+            raise
         except Exception as error:
             attempt["status"] = "FAILED"
             attempt["error"] = _redact(str(error), api_key)

@@ -243,6 +243,9 @@ def test_resume40_rejects_damaged_local_and_content_cache(variant40, stage, corr
             if "response_sha256" in cached:
                 # Совпадение хеша не заменяет проверку полноты ответа.
                 cached["response_sha256"] = pipeline.fingerprint(cached["response"])
+                cached["record_sha256"] = pipeline.fingerprint({
+                    "response": cached["response"], "provenance": cached.get("provenance"),
+                })
             cached_path.write_text(json.dumps(cached))
     resumed, session = run(case, resume=ready["manifest_path"])
     assert session.calls == [(stage, 2 if stage == "ocr" else None)]
@@ -253,6 +256,8 @@ def test_resume40_rejects_damaged_local_and_content_cache(variant40, stage, corr
 def test_cli_resume40_after_timeout_or_interrupt(variant40, monkeypatch, failure, exit_code):
     case = variant40
     sessions = []
+    now = [provider.time.time()]
+    monkeypatch.setattr(provider.time, "time", lambda: now[0])
 
     def session_factory():
         session = Variant40Session(case, {("ocr", 2): failure} if not sessions else None)
@@ -268,6 +273,9 @@ def test_cli_resume40_after_timeout_or_interrupt(variant40, monkeypatch, failure
     assert failed["status"] == "FAILED" and failed["ocr_calls"] == 2
     assert (case.context.cache_dir / "ocr" / "page_001.json").exists()
     assert not (case.context.cache_dir / "ocr" / "page_002.json").exists()
+    assert failed["variants"][0]["attempts"][-1]["status"] == ("FAILED" if exit_code == 1 else "INTERRUPTED")
+    if isinstance(failure, requests.Timeout):
+        now[0] += 61  # Серверная пауза сохраняется между клиентами; реального сна нет.
     assert cli.cli(["--resume", str(manifest), "--local-only"]) == 2
     assert sessions[1].calls == [("ocr", 2), ("ocr", 3), ("classification", None)]
     resumed_path = next(path for path in (case.base / "reports").glob("*/manifest.json") if path != manifest)

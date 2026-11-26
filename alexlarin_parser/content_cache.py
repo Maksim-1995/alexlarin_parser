@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from .io import atomic_json, fingerprint, read_json
+from .model_response import ModelResponse
 
 
 def response_cache_path(context, stage, identity, *, cache_dir=None):
@@ -25,12 +26,18 @@ def read_response(path, identity, validate):
         response = cached["response"]
         if cached.get("response_sha256") != fingerprint(response):
             return None
+        if "record_sha256" in cached and cached["record_sha256"] != fingerprint({
+            "response": response, "provenance": cached.get("provenance"),
+        }):
+            return None
         validate(response)
-        return response
+        return ModelResponse(response, cached.get("provenance"))
     except (KeyError, TypeError, ValueError):
         return None
 
 
 def write_response(path, identity, response):
     """Записать ответ атомарно; вызывающий этап уже обязан проверить схему."""
-    atomic_json(path, {"identity": identity, "response_sha256": fingerprint(response), "response": response})
+    record = {"response": response, "provenance": getattr(response, "provenance", None)}
+    atomic_json(path, {"identity": identity, "response_sha256": fingerprint(response),
+                       "record_sha256": fingerprint(record), **record})

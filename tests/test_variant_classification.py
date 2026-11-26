@@ -71,7 +71,7 @@ class FakeClient:
             "stage": stage, "max_tokens": 8192,
         })
 
-    def request_json(self, messages, *, stage, debug_dir):
+    def request_json(self, messages, *, stage, debug_dir, validate=None):
         self.calls.append({"messages": messages, "stage": stage, "debug_dir": debug_dir})
         if self.failure:
             raise self.failure
@@ -222,6 +222,7 @@ def test_invalid_content_cache_is_not_used(context, tasks, catalogues, corruptio
         cached["response"]["tasks"][0]["topics_id"] = 11
     if corruption != "integrity":
         cached["response_sha256"] = fingerprint(cached["response"])
+        cached["record_sha256"] = fingerprint({"response": cached["response"], "provenance": cached.get("provenance")})
     content_path.write_text(json.dumps(cached))
     current = copy.copy(context)
     current.cache_dir = context.base_dir / "other-cache"

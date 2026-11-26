@@ -317,7 +317,7 @@ def test_cooldown_respects_retry_after_and_retries_after_expiry(
         retry_after = format_datetime(FrozenDatetime.now() + timedelta(seconds=90), usegmt=True)
     headers = {"Retry-After": retry_after} if retry_after is not None else {}
     session = FakeSession(FakeResponse(status=status, headers=headers), FakeResponse(), FakeResponse(), FakeResponse())
-    client = DeepSeekClient(chain_settings, session=session)
+    client = DeepSeekClient(chain_settings, session=session, rate_limiter=RequestRateLimiter(clock=lambda: now[0]))
     client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)
     now[0] += delay - 0.1
     client.request_json(MESSAGES, stage="classification", debug_dir=tmp_path)
@@ -331,7 +331,7 @@ def test_timeout_falls_back_and_cools_down_without_extra_attempts(tmp_path, chai
     now = [100.0]
     monkeypatch.setattr(provider.time, "monotonic", lambda: now[0])
     session = FakeSession(requests.Timeout("test timeout"), FakeResponse(), FakeResponse(), FakeResponse())
-    client = DeepSeekClient(chain_settings, session=session)
+    client = DeepSeekClient(chain_settings, session=session, rate_limiter=RequestRateLimiter(clock=lambda: now[0]))
     client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)
     now[0] += 59
     client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)

@@ -103,7 +103,7 @@ class FakeClient:
         self.calls = []
         self.failures = {}
 
-    def request_json(self, messages, *, stage, debug_dir):
+    def request_json(self, messages, *, stage, debug_dir, validate=None):
         key = next(part for part in Path(debug_dir).parts if part.startswith("ege_"))
         number = int(re.fullmatch(r"ege_2013_trvar(\d+)", key)[1])
         page_number = None
@@ -316,7 +316,8 @@ def test_paid_block_does_not_stop_recovered_free_provider_in_next_variant(projec
         responses.append(completion(response_client.request_json(messages, stage=stage, debug_dir=contexts[1].debug_dir)))
     session = Mock()
     session.post.side_effect = responses
-    client = provider.DeepSeekClient(settings, session=session)
+    client = provider.DeepSeekClient(settings, session=session,
+                                     rate_limiter=provider.RequestRateLimiter(clock=lambda: now[0]))
     report = run_batch(base, contexts, client=client)
     assert report["variants"][0]["status"] == "FAILED"
     assert report["variants"][1]["status"] == "NEEDS_REVIEW"

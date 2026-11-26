@@ -31,6 +31,11 @@ class QuotaExceeded(RuntimeError):
                          f"повтор возможен через {math.ceil(retry_after)} с")
 
 
+class CooldownActive(RuntimeError):
+    def __init__(self, provider, retry_after):
+        super().__init__(f"{provider}: cooldown/Retry-After; повтор возможен через {math.ceil(retry_after)} с")
+
+
 class RequestRateLimiter:
     """Резервировать квоту до HTTP, не ждать и не повторять запрос.
 
@@ -59,6 +64,9 @@ class RequestRateLimiter:
                     or any(type(t) not in {int, float} or not math.isfinite(t) or t < 0
                            for t in record["requests"])):
                 raise ValueError("Неверные данные журнала квот; HTTP не отправлен")
+            until = record.get("cooldown_until", 0)
+            if type(until) not in {int, float} or not math.isfinite(until) or until < 0:
+                raise ValueError("Неверный cooldown в журнале квот; HTTP не отправлен")
         return state
 
     @contextmanager
@@ -82,13 +90,11 @@ class RequestRateLimiter:
         Исключение внутри with (например, ошибка записи диагностики) отменяет
         резервирование. Ошибки самого HTTP квоту уже расходуют.
         """
-        if limits.rpm is None and limits.rpd is None:
-            yield
-            return
         key = fingerprint({"provider": limits.provider, "base_url": base_url, "api_key": api_key})
         with self._locked_state() as state:
             now = self.clock()
-            recent = sorted(t for t in state["providers"].get(key, {}).get("requests", []) if t > now - 86400)
+            record = state["providers"].get(key, {})
+            recent = sorted(t for t in record.get("requests", []) if t > now - 86400)
             exhausted, delays = [], []
             for name, budget, window in (("RPM", limits.rpm, 60), ("RPD", limits.rpd, 86400)):
                 active = [t for t in recent if t > now - window]
@@ -97,7 +103,21 @@ class RequestRateLimiter:
                     delays.append(active[len(active) - budget] + window - now)
             if exhausted:
                 raise QuotaExceeded(limits.provider, exhausted, max(delays))
+            if record.get("cooldown_until", 0) > now:
+                raise CooldownActive(limits.provider, record["cooldown_until"] - now)
             yield
-            state["providers"][key] = {"provider": limits.provider, "requests": [*recent, self.clock()]}
+            if limits.rpm is not None or limits.rpd is not None:
+                state["providers"][key] = {**record, "provider": limits.provider, "requests": [*recent, self.clock()]}
+                if self.path is not None:
+                    atomic_json(self.path, state)
+
+    def defer(self, provider, *, base_url, api_key, seconds):
+        """Сохранить абсолютный срок серверного cooldown независимо от RPM/RPD."""
+        key = fingerprint({"provider": provider, "base_url": base_url, "api_key": api_key})
+        with self._locked_state() as state:
+            record = state["providers"].get(key, {"provider": provider, "requests": []})
+            state["providers"][key] = {
+                **record, "cooldown_until": max(record.get("cooldown_until", 0), self.clock() + seconds),
+            }
             if self.path is not None:
                 atomic_json(self.path, state)

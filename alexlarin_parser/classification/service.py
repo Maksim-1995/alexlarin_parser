@@ -7,12 +7,14 @@ DeepSeek-протокол; Gemini-кэш сюда не переносится.
 
 import hashlib
 import json
+import logging
 from pathlib import Path
 import re
 
 from alexlarin_parser.io import atomic_json, fingerprint as _variant_fingerprint
 from alexlarin_parser.prompts import load_prompt
 from alexlarin_parser.content_cache import response_cache_path, read_response, write_response
+from alexlarin_parser.model_response import ModelResponse, response_provenance
 from .catalogues import allowed_categories, load_catalog, validate_classification
 
 
@@ -203,7 +205,9 @@ def classify_variant(context, tasks, client, *, exams_path, topics_path, cache_d
                 if result != normalized or cached.get("requests_used") != 1:
                     raise ValueError("Сохранённая классификация расходится с ответом модели")
                 print(f"{context.variant_key}: классификация из кэша, новых запросов 0.", flush=True)
-                return result
+                provenance = response_provenance(ModelResponse(cached["response"], cached.get("provenance")),
+                                                 client.settings.identity("classification"))
+                return ModelResponse(result, provenance)
         except (OSError, UnicodeError, ValueError, TypeError, KeyError) as error:
             print(f"{context.variant_key}: кэш классификации не прошёл проверку: {error}", flush=True)
 
@@ -218,7 +222,8 @@ def classify_variant(context, tasks, client, *, exams_path, topics_path, cache_d
     response = read_response(content_path, content_identity, validate_request_response)
     from_content_cache = response is not None
     if response is None:
-        response = client.request_json(messages, stage="classification", debug_dir=context.debug_dir)
+        response = client.request_json(messages, stage="classification", debug_dir=context.debug_dir,
+                                       validate=validate_request_response)
     try:
         result = current_result(response)
     except (ValueError, TypeError) as error:
@@ -227,18 +232,23 @@ def classify_variant(context, tasks, client, *, exams_path, topics_path, cache_d
             f"Прежний кэш сохранён; автоматического исправления нет. Причина: {error}"
         ) from error
     normalized = [{"task_num": number, **result[number]} for number in sorted(result)]
+    provenance = response_provenance(response, client.settings.identity("classification"))
     atomic_json(cache_path, {
         "identity": identity,
         "fingerprint": fingerprint,
         "requests_used": 1,
         "response": response,
         "tasks": normalized,
+        "provenance": provenance,
     })
     if not from_content_cache:
-        write_response(content_path, content_identity, response)
+        try:
+            write_response(content_path, content_identity, ModelResponse(response, provenance))
+        except OSError as error:
+            logging.getLogger(__name__).warning("Общий кэш классификации не записан: %s", error)
     else:
         print(f"{context.variant_key}: классификация по содержимому, новых запросов 0.", flush=True)
-    return result
+    return ModelResponse(result, provenance)
 
 
 def classification_review_warnings(tasks, *, exams_path, topics_path):

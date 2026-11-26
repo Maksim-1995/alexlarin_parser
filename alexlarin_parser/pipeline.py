@@ -54,6 +54,18 @@ def _read_resume_manifest(path):
     previous = read_json(path)
     if not isinstance(previous, dict) or not isinstance(previous.get("variants"), list):
         raise ValueError("Не удалось прочитать манифест --resume")
+    seen = set()
+    for state in previous["variants"]:
+        if not isinstance(state, dict) or not isinstance(state.get("source_url"), str):
+            raise ValueError("Манифест --resume содержит неверную запись варианта")
+        context = VariantContext.from_url(state["source_url"], Path("."))
+        if state.get("variant_key") != context.variant_key:
+            raise ValueError("Манифест --resume: variant_key не соответствует source_url")
+        if context.variant_key in seen:
+            raise ValueError("Манифест --resume содержит повторный вариант")
+        seen.add(context.variant_key)
+    if not seen:
+        raise ValueError("Манифест --resume не содержит вариантов")
     return previous
 
 
@@ -173,6 +185,7 @@ def _classify_tasks(base_dir, context, tasks, state, client, *, cache_dir, pdf_p
     topics_path = base_dir / "data" / "topics.csv"
     classified = classify_variant(context, tasks, client, exams_path=exams_path,
                                   topics_path=topics_path, cache_dir=cache_dir)
+    state["classification_provenance"] = getattr(classified, "provenance", None)
     for task in tasks:
         task.update(classified[task["task_num"]])
     corrections = apply_task_corrections(
@@ -358,6 +371,12 @@ def run_batch(base_dir, contexts, *, client=None, fresh_ai=False, local_only=Fal
     resumed = {}
     if resume_from:
         resumed = {v["variant_key"]: v for v in _read_resume_manifest(resume_from)["variants"]}
+        # Проверить весь выбранный набор до создания клиента и любых HTTP.
+        for context in contexts:
+            previous = resumed.get(context.variant_key)
+            if previous is None or previous["source_url"] != context.source_url:
+                raise ValueError("Выбранный вариант не соответствует манифесту --resume")
+            _cache_directory(context, "", fresh_ai=False, previous_state=previous)
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ_") + uuid.uuid4().hex[:8]
     report_dir = base_dir / "reports" / run_id
     manifest_path = report_dir / "manifest.json"

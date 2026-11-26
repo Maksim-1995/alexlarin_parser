@@ -1,12 +1,14 @@
 """Возобновляемый OCR, проверка фрагментов и сборка задач одного варианта."""
 
 from pathlib import Path
+import logging
 
 import pymupdf
 
 from ..io import atomic_json, file_sha256, fingerprint, read_json
 from ..prompts import load_prompt
 from ..content_cache import response_cache_path, read_response, write_response
+from ..model_response import ModelResponse, response_provenance, pages_provenance
 from ..sources.parsing import normalize_label
 from .rendering import _image_part, render_scheme
 
@@ -189,7 +191,7 @@ def recognize_variant(context, sources, client, *, cache_dir=None, allow_legacy=
     # Проверенные ручные ответы 542 уже полны; не распознаём их повторно.
     if sources.get("extra_answers"):
         answer_images = []
-    results, previous_label, identities = [], None, []
+    results, previous_label, identities, provenance = [], None, [], []
     with pymupdf.open(pdf_path) as document:
         for index, page in enumerate(document):
             page_num = index + 1
@@ -220,7 +222,9 @@ def recognize_variant(context, sources, client, *, cache_dir=None, allow_legacy=
             cached = read_json(path)
             # Совпадение identity необходимо, но недостаточно: даже готовый
             # JSON кэша проходит те же проверки фрагментов, что и новый ответ.
-            data = cached.get("response") if isinstance(cached, dict) and cached.get("identity") == identity else None
+            data = (ModelResponse(cached["response"], cached.get("provenance"))
+                    if isinstance(cached, dict) and cached.get("identity") == identity
+                    and isinstance(cached.get("response"), dict) else None)
             if data is not None:
                 try:
                     result = validate_page(data, page_num, expected, all_labels, previous_label,
@@ -264,14 +268,20 @@ def recognize_variant(context, sources, client, *, cache_dir=None, allow_legacy=
                 data = read_response(content_path, content_identity, validate_response)
                 from_content_cache = data is not None
                 if data is None:
-                    data = client.request_json(messages, stage="ocr", debug_dir=context.debug_dir)
+                    data = client.request_json(messages, stage="ocr", debug_dir=context.debug_dir,
+                                               validate=validate_response)
                 result = validate_page(data, page_num, expected, all_labels, previous_label,
                                        has_answer_images=bool(attached))
                 # До этой точки неполный или структурно неверный ответ не
                 # становится готовой страницей для последующего возобновления.
-                atomic_json(path, {"identity": identity, "response": _public_page(result)})
+                actual = response_provenance(data, client.settings.identity("ocr"))
+                atomic_json(path, {"identity": identity, "response": _public_page(result), "provenance": actual})
                 if not from_content_cache:
-                    write_response(content_path, content_identity, _public_page(result))
+                    try:
+                        write_response(content_path, content_identity, ModelResponse(_public_page(result), actual))
+                    except OSError as error:
+                        logging.getLogger(__name__).warning("Общий кэш OCR не записан: %s", error)
+            provenance.append({"page_num": page_num, **response_provenance(data, client.settings.identity("ocr"))})
             results.append(result)
             if result["tasks"]:
                 previous_label = result["tasks"][-1]["source_label"]
@@ -281,4 +291,4 @@ def recognize_variant(context, sources, client, *, cache_dir=None, allow_legacy=
         "variant_key": context.variant_key, "source_url": context.source_url,
         "page_identities_sha256": fingerprint(identities), **combined,
     })
-    return {**combined, "provenance": client.settings.identity("ocr")}
+    return {**combined, "provenance": pages_provenance(provenance)}

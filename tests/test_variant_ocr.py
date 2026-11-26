@@ -47,7 +47,7 @@ class FakeClient:
                                     "thinking": "disabled", "stage": stage},
         )
 
-    def request_json(self, messages, *, stage, debug_dir):
+    def request_json(self, messages, *, stage, debug_dir, validate=None):
         content = messages[0]["content"]
         # Номер страницы передан явно; не вычисляем его из количества вызовов
         # (при возобновлении первой оплачиваемой может быть вторая страница).
@@ -282,6 +282,7 @@ def test_content_ocr_cache_is_validated_before_becoming_current_page(context, so
     cached = json.loads(path.read_text())
     cached["response"]["tasks"][0]["source_label"] = "C99"
     cached["response_sha256"] = fingerprint(cached["response"])
+    cached["record_sha256"] = fingerprint({"response": cached["response"], "provenance": cached.get("provenance")})
     path.write_text(json.dumps(cached))
     current = copy.copy(context)
     current.cache_dir = tmp_path / "other-cache"
