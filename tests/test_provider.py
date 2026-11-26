@@ -258,7 +258,7 @@ def chain_settings(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("stage", ["ocr", "classification"])
-@pytest.mark.parametrize("successful_index", range(5))
+@pytest.mark.parametrize("successful_index", range(4))
 def test_chain_order_first_success_payload_and_actual_attempts(tmp_path, chain_settings, stage, successful_index):
     from dataclasses import replace
 
@@ -266,7 +266,7 @@ def test_chain_order_first_success_payload_and_actual_attempts(tmp_path, chain_s
     session = FakeSession(*[FakeResponse(status=503) for _ in range(successful_index)], FakeResponse())
     client = DeepSeekClient(settings, session=session)
     assert client.request_json(MESSAGES, stage=stage, debug_dir=tmp_path) == {"tasks": []}
-    order = ["gemini", "nvidia-nim", "groq", "openrouter", "deepseek-direct"]
+    order = ["gemini", "nvidia-nim", "openrouter", "deepseek-direct"]
     assert [attempt["provider"] for attempt in client.attempts] == order[:successful_index + 1]
     assert len(session.calls) == client.counter.total == getattr(client.counter, stage) == successful_index + 1
     assert [a["status"] for a in client.attempts] == ["FAILED"] * successful_index + ["RECEIVED"]
@@ -297,6 +297,25 @@ def test_stage_specific_free_models_do_not_require_deepseek_key(tmp_path, chain_
     assert not settings.api_key and client.blocked is None
     assert [a["provider"] for a in client.attempts] == ["gemini", "nvidia-nim"]
     assert client.counter.ocr == client.counter.classification == 1
+
+
+@pytest.mark.parametrize("missing_stage", ["ocr", "classification"])
+def test_missing_nvidia_model_skips_only_that_stage(tmp_path, chain_settings, monkeypatch, missing_stage):
+    monkeypatch.setenv("GEMINI_API_KEY", "")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "")
+    monkeypatch.setenv(f"NVIDIA_{missing_stage.upper()}_MODEL", "")
+    settings = DeepSeekSettings.from_env(tmp_path)
+    session = FakeSession(FakeResponse())
+    client = DeepSeekClient(settings, session=session)
+    with pytest.raises(PaidCallsBlocked):
+        client.request_json(MESSAGES, stage=missing_stage, debug_dir=tmp_path)
+    assert not session.calls and not client.attempts and client.counter.total == 0
+    available_stage = "classification" if missing_stage == "ocr" else "ocr"
+    result = client.request_json(MESSAGES, stage=available_stage, debug_dir=tmp_path)
+    assert result.provenance["provider"] == "nvidia-nim"
+    assert [a["provider"] for a in client.attempts] == ["nvidia-nim"]
+    assert len(session.calls) == client.counter.total == 1
 
 
 @pytest.mark.parametrize("status", [429, 503])
@@ -343,7 +362,7 @@ def test_timeout_falls_back_and_cools_down_without_extra_attempts(tmp_path, chai
 
 
 @pytest.mark.parametrize("status", [401, 403])
-@pytest.mark.parametrize("failed_index", range(4))
+@pytest.mark.parametrize("failed_index", range(3))
 def test_auth_failure_disables_only_current_free_provider(tmp_path, chain_settings, status, failed_index):
     from dataclasses import replace
 
@@ -359,14 +378,26 @@ def test_auth_failure_disables_only_current_free_provider(tmp_path, chain_settin
 
 
 def test_failed_chain_without_paid_key_counts_only_actual_requests(tmp_path, chain_settings):
-    session = FakeSession(*[FakeResponse(status=503) for _ in range(4)])
+    session = FakeSession(*[FakeResponse(status=503) for _ in range(3)])
     client = DeepSeekClient(chain_settings, session=session)
     with pytest.raises(PaidCallsBlocked):
         client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)
     with pytest.raises(PaidCallsBlocked):
         client.request_json(MESSAGES, stage="classification", debug_dir=tmp_path)
-    assert len(session.calls) == client.counter.total == len(client.attempts) == 4
+    assert len(session.calls) == client.counter.total == len(client.attempts) == 3
     assert client.counter.classification == 0
+
+
+@pytest.mark.parametrize("model", ["paid-model", "", "provider/model:free"])
+def test_inactive_environment_models_and_quotas_do_not_affect_route(tmp_path, chain_settings, monkeypatch, model):
+    for prefix in ("GROQ",):
+        monkeypatch.setenv(f"{prefix}_OCR_MODEL", model)
+        monkeypatch.setenv(f"{prefix}_RPM", "invalid")
+        monkeypatch.setenv(f"{prefix}_RPD", "0")
+    settings = DeepSeekSettings.from_env(tmp_path)
+    assert [p.name for p in settings.free_providers] == ["gemini", "nvidia-nim", "openrouter"]
+    assert not settings.rate_limits
+    assert all(settings.identity(stage) == chain_settings.identity(stage) for stage in ("ocr", "classification"))
 
 
 @pytest.mark.parametrize("model", ["paid-model", "", "provider/model:free"])
@@ -377,6 +408,7 @@ def test_openrouter_accepts_only_explicit_free_models(tmp_path, chain_settings, 
             DeepSeekSettings.from_env(tmp_path)
     else:
         settings = DeepSeekSettings.from_env(tmp_path)
+        assert settings.free_providers[-1].name == "openrouter"
         assert settings.free_providers[-1].ocr_model == model
 
 
@@ -429,26 +461,26 @@ def test_every_provider_including_paid_tail_has_independent_shared_stage_quota(t
                        rate_limits=tuple(ProviderLimits(name, rpm=1, rpd=1) for name in names))
     session = FakeSession(*[FakeResponse() for _ in names])
     client = DeepSeekClient(settings, session=session, rate_limiter=RequestRateLimiter(clock=lambda: 100000.0))
-    for stage in ("ocr", "classification", "ocr", "classification", "ocr"):
+    for stage in ("ocr", "classification", "ocr", "classification"):
         client.request_json(MESSAGES, stage=stage, debug_dir=tmp_path)
     with pytest.raises(provider.RateLimitBlocked):
         client.request_json(MESSAGES, stage="classification", debug_dir=tmp_path)
     assert [a["provider"] for a in client.attempts] == names
-    assert len(session.calls) == client.counter.total == 5
-    assert (client.counter.ocr, client.counter.classification) == (3, 2)
-    assert len(list(tmp_path.glob("attempt_*.json"))) == 5
+    assert len(session.calls) == client.counter.total == 4
+    assert (client.counter.ocr, client.counter.classification) == (2, 2)
+    assert len(list(tmp_path.glob("attempt_*.json"))) == 4
 
 
 def test_error_fallback_checks_target_provider_budget_too(tmp_path, chain_settings, monkeypatch):
     now = [100000.0]
     monkeypatch.setattr(provider.time, "monotonic", lambda: now[0])
-    settings = replace(chain_settings, rate_limits=(ProviderLimits("nvidia-nim", rpd=1),))
+    settings = replace(chain_settings, api_key=TEST_KEY, rate_limits=(ProviderLimits("nvidia-nim", rpd=1),))
     session = FakeSession(FakeResponse(status=503), FakeResponse(), FakeResponse(status=503), FakeResponse())
     client = DeepSeekClient(settings, session=session, rate_limiter=RequestRateLimiter(clock=lambda: now[0]))
     client.request_json(MESSAGES, stage="ocr", debug_dir=tmp_path)
     now[0] += 61
     client.request_json(MESSAGES, stage="classification", debug_dir=tmp_path)
-    assert [a["provider"] for a in client.attempts] == ["gemini", "nvidia-nim", "gemini", "groq"]
+    assert [a["provider"] for a in client.attempts] == ["gemini", "nvidia-nim", "gemini", "openrouter"]
     assert len(session.calls) == client.counter.total == 4
 
 
@@ -533,7 +565,7 @@ def test_parallel_calls_to_one_client_keep_unique_attempts_and_input_binding(tmp
     assert len(session.calls) == client.counter.total == 2
 
 
-@pytest.mark.parametrize("prefix", ["GEMINI", "NVIDIA", "GROQ", "OPENROUTER", "DEEPSEEK"])
+@pytest.mark.parametrize("prefix", ["GEMINI", "NVIDIA", "OPENROUTER", "DEEPSEEK"])
 @pytest.mark.parametrize("kind", ["RPM", "RPD"])
 @pytest.mark.parametrize("value", ["0", "-1", "1.5", "invalid"])
 def test_invalid_limit_configuration_is_rejected(tmp_path, monkeypatch, prefix, kind, value):
@@ -545,8 +577,8 @@ def test_invalid_limit_configuration_is_rejected(tmp_path, monkeypatch, prefix, 
 def test_limits_for_all_providers_are_loaded_without_changing_cache_identity(tmp_path, monkeypatch):
     monkeypatch.setattr(os, "environ", {})
     initial = DeepSeekSettings.from_env(tmp_path)
-    names = ("gemini", "nvidia-nim", "groq", "openrouter", "deepseek-direct")
-    for index, prefix in enumerate(("GEMINI", "NVIDIA", "GROQ", "OPENROUTER", "DEEPSEEK"), 1):
+    names = ("gemini", "nvidia-nim", "openrouter", "deepseek-direct")
+    for index, prefix in enumerate(("GEMINI", "NVIDIA", "OPENROUTER", "DEEPSEEK"), 1):
         monkeypatch.setenv(f"{prefix}_RPM", str(index))
         monkeypatch.setenv(f"{prefix}_RPD", str(index * 10))
     settings = DeepSeekSettings.from_env(tmp_path)

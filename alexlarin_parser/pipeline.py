@@ -121,7 +121,7 @@ def _new_variant_state(context):
         "missing_answers": [], "warnings": [], "error": None, "result": None,
         "previous_result": _result_snapshot(context), "result_current_attempt": False,
         "ocr_calls": 0, "classification_calls": 0, "download_count": 0,
-        "stage_seconds": {}, "seconds": 0, "usage": usage_summary([]),
+        "stage_seconds": {}, "seconds": 0, "usage": usage_summary([]), "provider_diagnostics": [],
     }
 
 
@@ -301,6 +301,7 @@ def _run_variant(base_dir, context, state, client, *, run_id, report_dir,
                  previous_state, fresh_ai, local_only, blocked, save):
     """Ограничить ошибку одним вариантом и вернуть общий блокер платных вызовов."""
     started, attempt_offset = time.monotonic(), len(client.attempts)
+    diagnostic_offset = len(getattr(client, "provider_diagnostics", []))
     ocr_before, classification_before = client.counter.ocr, client.counter.classification
     downloads_before = context.download_count
     run_debug = context.debug_dir / "runs" / run_id
@@ -328,6 +329,7 @@ def _run_variant(base_dir, context, state, client, *, run_id, report_dir,
         # Срез включает timeout и отклонённые ответы, не только успешные результаты.
         attempts = client.attempts[attempt_offset:]
         state["attempts"] = attempts
+        state["provider_diagnostics"] = getattr(client, "provider_diagnostics", [])[diagnostic_offset:]
         state["usage"] = usage_summary(attempts)
         state["ocr_calls"] = client.counter.ocr - ocr_before
         state["classification_calls"] = client.counter.classification - classification_before

@@ -55,11 +55,17 @@ _FREE_ENDPOINTS = (
     ("groq", "GROQ", "https://api.groq.com/openai/v1"),
     ("openrouter", "OPENROUTER", "https://openrouter.ai/api/v1"),
 )
+# Реализации оставлены для совместимости, но их конфигурация не включает
+# провайдеров в рабочий маршрут, даже если старые ключи/модели заполнены.
+_INACTIVE_PROVIDERS = frozenset({"groq"})
+_ACTIVE_FREE_ENDPOINTS = tuple(
+    endpoint for endpoint in _FREE_ENDPOINTS if endpoint[0] not in _INACTIVE_PROVIDERS
+)
 
 
 def _load_rate_limits():
     limits = []
-    prefixes = [(name, prefix) for name, prefix, _ in _FREE_ENDPOINTS]
+    prefixes = [(name, prefix) for name, prefix, _ in _ACTIVE_FREE_ENDPOINTS]
     for name, prefix in [*prefixes, ("deepseek-direct", "DEEPSEEK")]:
         values = {}
         for kind in ("RPM", "RPD"):
@@ -88,7 +94,7 @@ class _FreeProvider:
 
 def _load_free_providers():
     providers = []
-    for name, prefix, base_url in _FREE_ENDPOINTS:
+    for name, prefix, base_url in _ACTIVE_FREE_ENDPOINTS:
         api_key = os.environ.get(f"{prefix}_API_KEY", "").strip()
         ocr_model = os.environ.get(f"{prefix}_OCR_MODEL", "").strip()
         classification_model = os.environ.get(
@@ -107,6 +113,19 @@ def _load_free_providers():
             _FreeProvider(name, base_url, api_key, ocr_model, classification_model)
         )
     return tuple(providers)
+
+
+def _load_configuration_issues():
+    """Сохранить причины пропуска этапов без значений ключей и без смены identity."""
+    issues = []
+    for name, prefix, _ in _ACTIVE_FREE_ENDPOINTS:
+        for stage in ("ocr", "classification"):
+            missing = [variable for variable in (
+                f"{prefix}_API_KEY", f"{prefix}_{stage.upper()}_MODEL"
+            ) if not os.environ.get(variable, "").strip()]
+            if missing:
+                issues.append((name, stage, "Не заданы: " + ", ".join(missing)))
+    return tuple(issues)
 
 
 def _retry_delay(headers):
@@ -161,10 +180,17 @@ class DeepSeekSettings:
     free_providers: tuple[_FreeProvider, ...] = ()
     rate_limits: tuple[ProviderLimits, ...] = ()
     rate_limit_path: Path | None = None
+    configuration_issues: tuple[tuple[str, str, str], ...] = ()
 
 
     def __post_init__(self):
         """Отклонить неверный thinking, неположительные лимиты и не-HTTPS URL."""
+        # Ограничение действует также для программно созданных клиентов.
+        # Identity должна описывать только достижимых участников цепочки.
+        object.__setattr__(self, "free_providers", tuple(
+            provider for provider in self.free_providers
+            if provider.name not in _INACTIVE_PROVIDERS
+        ))
         if self.classification_thinking not in {"disabled", "enabled"}:
             raise ValueError("DEEPSEEK_CLASSIFICATION_THINKING: disabled либо enabled")
         if min(self.connect_timeout, self.read_timeout, self.max_tokens, self.dpi) <= 0:
@@ -197,6 +223,7 @@ class DeepSeekSettings:
             max_tokens=int(os.environ.get("DEEPSEEK_MAX_TOKENS", "16384")),
             dpi=int(os.environ.get("OCR_DPI", "300")),
             free_providers=_load_free_providers(),
+            configuration_issues=_load_configuration_issues(),
             rate_limits=rate_limits,
             rate_limit_path=(Path(base_dir) / "input" / "cache" / "provider_quotas.json"
                              if base_dir is not None else None),
@@ -247,8 +274,11 @@ class DeepSeekClient:
             self.session.mount("https://", HTTPAdapter(max_retries=0))
         self.counter = counter if counter is not None else AIRequestCounter()
         self.attempts = []
+        self.provider_diagnostics = []
+        self._routing_requests = 0
         self.blocked = None
         self._disabled = set()
+        self._disabled_reasons = {}
         self._cooldown_until = {}
         self._request_lock = Lock()
         self._rate_limiter = rate_limiter if rate_limiter is not None else RequestRateLimiter(settings.rate_limit_path)
@@ -273,52 +303,83 @@ class DeepSeekClient:
         if stage not in {"ocr", "classification"}:
             raise ValueError("Неизвестный этап AI")
 
-        quota_errors = []
-        for provider in self.settings.free_providers:
-            model = provider.model_for(stage)
-            if not model or provider.name in self._disabled:
-                continue
-            if time.monotonic() < self._cooldown_until.get(provider.name, 0):
-                continue
+        # Номер логического запроса не является счётчиком HTTP. Причины
+        # отсутствующей конфигурации нужны и для не созданных адаптеров.
+        self._routing_requests += 1
+        diagnostics = []
+        configured = {p.name: p for p in self.settings.free_providers}
+        routes = [(configured.get(name, _FreeProvider(name, base_url, "", "", "")), prefix)
+                  for name, prefix, base_url in _ACTIVE_FREE_ENDPOINTS]
+        routes.append((_FreeProvider("deepseek-direct", self.settings.base_url, self.settings.api_key,
+                                     self.settings.model, self.settings.model), "DEEPSEEK"))
 
+        def record(candidate, status, kind, reason, attempt=None):
+            entry = {
+                "request": self._routing_requests, "stage": stage, "provider": candidate.name,
+                "model": candidate.model_for(stage) or None,
+                "status": status, "kind": kind, "reason": reason,
+            }
+            if attempt is not None:
+                entry["attempt"] = attempt["attempt"]
+                if "http_status" in attempt:
+                    entry["http_status"] = attempt["http_status"]
+            diagnostics.append(entry)
+            self.provider_diagnostics.append(entry)
+
+        final_error_type = PaidCallsBlocked
+        for index, (candidate, prefix) in enumerate(routes):
+            name, model = candidate.name, candidate.model_for(stage)
+            paid = name == "deepseek-direct"
+            if not candidate.api_key or not model:
+                missing = []
+                if not candidate.api_key:
+                    missing.append(f"{prefix}_API_KEY")
+                if not model:
+                    missing.append("DEEPSEEK_MODEL" if paid else f"{prefix}_{stage.upper()}_MODEL")
+                reason = next((reason for provider, current_stage, reason in self.settings.configuration_issues
+                               if provider == name and current_stage == stage),
+                              "Не заданы: " + ", ".join(missing))
+                record(candidate, "SKIPPED", "configuration", reason)
+                if paid:
+                    self.blocked = reason + "; платные запросы не отправлялись"
+                continue
+            if (paid and self.blocked) or name in self._disabled:
+                reason = self.blocked if paid else self._disabled_reasons.get(name, "Провайдер отключён")
+                record(candidate, "SKIPPED", "disabled", reason)
+                continue
+            remaining = self._cooldown_until.get(name, 0) - time.monotonic()
+            if remaining > 0 and not paid:
+                record(candidate, "SKIPPED", "cooldown", str(CooldownActive(name, remaining)))
+                continue
             try:
-                return self._request_once(
-                    messages,
-                    stage=stage,
-                    debug_dir=debug_dir,
-                    provider=provider.name,
-                    base_url=provider.base_url,
-                    model=model,
-                    api_key=provider.api_key,
-                    validate=validate,
+                result = self._request_once(
+                    messages, stage=stage, debug_dir=debug_dir, provider=name,
+                    base_url=candidate.base_url, model=model, api_key=candidate.api_key, validate=validate,
                 )
             except RateLimitBlocked as error:
-                quota_errors.append(str(error))
-                continue
-            except ProviderError:
-                # Причина уже сохранена в журнале HTTP-попытки.
-                continue
+                kind = "cooldown" if isinstance(error.__cause__, CooldownActive) else "quota"
+                record(candidate, "SKIPPED", kind, str(error))
+                final_error_type = RateLimitBlocked
+            except ProviderError as error:
+                attempt = self.attempts[-1]
+                record(candidate, "FAILED", attempt["error_kind"], str(error), attempt)
+                if paid:
+                    final_error_type = type(error)
+            except KeyboardInterrupt:
+                record(candidate, "INTERRUPTED", "interrupted", "KeyboardInterrupt", self.attempts[-1])
+                raise
+            else:
+                record(candidate, "RECEIVED", "http", "Ответ прошёл проверку", self.attempts[-1])
+                for unused, _ in routes[index + 1:]:
+                    record(unused, "SKIPPED", "not_needed", f"Получен валидный ответ {name}; HTTP не требуется")
+                return result
 
-        if self.blocked:
-            if quota_errors:
-                raise RateLimitBlocked("; ".join([*quota_errors, self.blocked]))
-            raise PaidCallsBlocked(self.blocked)
-        if not self.settings.api_key:
-            self.blocked = "Не задан DEEPSEEK_API_KEY; платные запросы не отправлялись"
-            if quota_errors:
-                raise RateLimitBlocked("; ".join([*quota_errors, self.blocked]))
-            raise PaidCallsBlocked(self.blocked)
-
-        return self._request_once(
-            messages,
-            stage=stage,
-            debug_dir=debug_dir,
-            provider="deepseek-direct",
-            base_url=self.settings.base_url,
-            model=self.settings.model,
-            api_key=self.settings.api_key,
-            validate=validate,
+        details = "; ".join(
+            f"{entry['provider']} [{stage}, "
+            f"{'HTTP отправлен' if 'attempt' in entry else 'пропущен'}]: {entry['reason']}"
+            for entry in diagnostics
         )
+        raise final_error_type(f"{stage}: цепочка провайдеров исчерпана; {details}")
 
     def _request_once(
         self, messages, *, stage, debug_dir, provider, base_url, model, api_key, validate
@@ -378,12 +439,15 @@ class DeepSeekClient:
             )
             status = response.status_code
             attempt["http_status"] = status
+            if not 200 <= status < 300:
+                attempt["error_kind"] = "http"
 
             if status in {401, 402, 403}:
                 if paid:
                     self.blocked = f"DeepSeek HTTP {status}: проверьте ключ, доступ и баланс"
                 else:
                     self._disabled.add(provider)
+                    self._disabled_reasons[provider] = f"{provider} отключён после HTTP {status}"
             elif status in {408, 429} or 500 <= status < 600:
                 delay = _retry_delay(response.headers)
                 self._cooldown_until[provider] = (
@@ -438,6 +502,7 @@ class DeepSeekClient:
                 try:
                     validate(data)
                 except (ValueError, TypeError) as error:
+                    attempt["error_kind"] = "validation"
                     raise ProviderError(f"{provider}: ответ не прошёл проверку схемы: {_redact(str(error), api_key)}") from error
 
             attempt["status"] = "RECEIVED"
@@ -447,6 +512,7 @@ class DeepSeekClient:
                 self._cooldown_until[provider] = time.monotonic() + 60
                 self._rate_limiter.defer(provider, base_url=base_url, api_key=api_key, seconds=60)
             attempt["status"] = "FAILED"
+            attempt["error_kind"] = "timeout" if isinstance(error, requests.Timeout) else "network"
             attempt["error"] = type(error).__name__
             raise ProviderError(f"{provider}: {type(error).__name__}") from error
         except KeyboardInterrupt:
@@ -455,6 +521,7 @@ class DeepSeekClient:
             raise
         except Exception as error:
             attempt["status"] = "FAILED"
+            attempt.setdefault("error_kind", "response")
             attempt["error"] = _redact(str(error), api_key)
             raise
         finally:

@@ -1,6 +1,8 @@
 """Регрессии замечаний ревью: подставной HTTP и данные только в tmp_path."""
 from pathlib import Path
+import base64
 import json
+import socket
 from unittest.mock import Mock
 
 import pytest
@@ -18,6 +20,104 @@ from alexlarin_parser.model_response import ModelResponse, response_provenance
 @pytest.fixture
 def project(tmp_path, monkeypatch):
     return fixtures.project.__wrapped__(tmp_path, monkeypatch)
+
+
+@pytest.mark.parametrize("stage", ["ocr", "classification"])
+@pytest.mark.parametrize("nvidia_outcome", ["valid", "503", "timeout", "invalid_schema"])
+def test_restored_openrouter_route_through_normal_pipeline(project, monkeypatch, stage, nvidia_outcome):
+    """Настоящие этапы/валидаторы; HTTP подставной, сеть запрещена."""
+    base, contexts, _ = project
+    monkeypatch.setattr(provider.os, "environ", {})
+    values = {"OCR_DPI": "72", "DEEPSEEK_API_KEY": "test-paid",
+              "DEEPSEEK_CLASSIFICATION_THINKING": "enabled"}
+    for prefix in ("GEMINI", "NVIDIA", "GROQ", "OPENROUTER"):
+        values[f"{prefix}_API_KEY"] = f"test-{prefix}"
+        for current in ("ocr", "classification"):
+            values[f"{prefix}_{current.upper()}_MODEL"] = (
+                "qwen/qwen3.5-122b-a10b" if prefix == "NVIDIA" else "test-model:free")
+    # Gemini участвует только в проверяемом этапе, NVIDIA — в обоих.
+    values[f"GEMINI_{'CLASSIFICATION' if stage == 'ocr' else 'OCR'}_MODEL"] = ""
+    (base / ".env").write_text("\n".join(f"{key}={value}" for key, value in values.items()))
+    reference = fixtures.FakeClient()
+    calls = []
+    nvidia_failed = False
+
+    def post(url, **kwargs):
+        nonlocal nvidia_failed
+        payload = kwargs["json"]
+        messages = payload["messages"]
+        current = "ocr" if isinstance(messages[0]["content"], list) else "classification"
+        calls.append((url, current, payload))
+        assert url in {
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+            "https://integrate.api.nvidia.com/v1/chat/completions",
+            "https://openrouter.ai/api/v1/chat/completions",
+            "https://api.deepseek.com/chat/completions",
+        }, "Отключённый провайдер получил HTTP-запрос"
+        if "googleapis.com" in url:
+            return wire.FakeResponse(status=503)
+        if "openrouter.ai" in url:
+            return wire.FakeResponse(status=503)
+        if "nvidia.com" in url:
+            assert payload["model"] == "qwen/qwen3.5-122b-a10b"
+            assert "thinking" not in payload and "response_format" not in payload
+            if current == "ocr":
+                images = [part["image_url"]["url"] for part in messages[0]["content"]
+                          if part["type"] == "image_url"]
+                assert images and all(image.startswith("data:image/png;base64,") for image in images)
+                assert all(base64.b64decode(image.split(",", 1)[1]).startswith(b"\x89PNG\r\n\x1a\n")
+                           for image in images)
+            else:
+                tasks = json.loads(messages[1]["content"])["tasks"]
+                assert len(tasks) == 2 and all(task["condition"] for task in tasks)
+            if current == stage and not nvidia_failed and nvidia_outcome != "valid":
+                nvidia_failed = True
+                if nvidia_outcome == "503":
+                    return wire.FakeResponse(status=503)
+                if nvidia_outcome == "timeout":
+                    raise requests.ReadTimeout("подставной тайм-аут")
+                return fixtures.completion({"unexpected": True})
+        return fixtures.completion(reference.request_json(messages, stage=current, debug_dir=contexts[0].debug_dir))
+
+    session = Mock()
+    session.post.side_effect = post
+    monkeypatch.setattr(provider.requests, "Session", lambda: session)
+    monkeypatch.setattr(socket.socket, "connect", lambda *a: pytest.fail("Реальная сеть запрещена"))
+    monkeypatch.setattr(socket.socket, "connect_ex", lambda *a: pytest.fail("Реальная сеть запрещена"))
+    report = pipeline.run_batch(base, contexts[:1], local_only=True)
+    state = report["variants"][0]
+    assert state["error"] is None and state["result_current_attempt"] is True
+    attempts = [attempt for attempt in state["attempts"] if attempt["stage"] == stage]
+    expected = ["gemini", "nvidia-nim"] + ([] if nvidia_outcome == "valid" else ["openrouter", "deepseek-direct"])
+    assert [attempt["provider"] for attempt in attempts[:len(expected)]] == expected
+    assert [attempt["status"] for attempt in attempts[:len(expected)]] == (
+        ["FAILED", "RECEIVED"] if nvidia_outcome == "valid" else ["FAILED", "FAILED", "FAILED", "RECEIVED"])
+    if nvidia_outcome == "invalid_schema":
+        assert "проверку схемы" in attempts[1]["error"]
+    if nvidia_outcome == "valid":
+        assert all(attempt["provider"] != "deepseek-direct" for attempt in state["attempts"])
+    assert report["ocr_calls"] + report["classification_calls"] == len(calls) == len(state["attempts"])
+    for _, current, payload in calls:
+        if payload["model"] == "deepseek-flash":
+            assert payload["thinking"] == {"type": "disabled" if current == "ocr" else "enabled"}
+        else:
+            assert "thinking" not in payload
+    assert state[f"{stage}_provenance"]["provider"] == (
+        "nvidia-nim" if nvidia_outcome == "valid" else
+        "mixed" if stage == "ocr" and nvidia_outcome == "invalid_schema" else "deepseek-direct")
+    session.close.assert_called_once()
+
+
+@pytest.mark.parametrize("stage", ["ocr", "classification"])
+def test_inactive_providers_cannot_be_injected_into_settings(tmp_path, stage):
+    settings = provider.DeepSeekSettings(api_key="test-paid", free_providers=tuple(
+        provider._FreeProvider(name, f"https://{name}.invalid/v1", "test-key", "vision", "text")
+        for name in ("groq",)))
+    session = wire.FakeSession(wire.FakeResponse())
+    client = provider.DeepSeekClient(settings, session=session)
+    client.request_json(wire.MESSAGES, stage=stage, debug_dir=tmp_path)
+    assert [a["provider"] for a in client.attempts] == ["deepseek-direct"]
+    assert "free_providers" not in settings.identity(stage)
 
 
 def free_client(context):
@@ -198,8 +298,8 @@ def test_shared_cache_checks_provenance_integrity_and_accepts_old_records(tmp_pa
 
 
 @pytest.mark.parametrize("name,prefix", [
-    ("gemini", "GEMINI"), ("nvidia-nim", "NVIDIA"), ("groq", "GROQ"),
-    ("openrouter", "OPENROUTER"), ("deepseek-direct", "DEEPSEEK"),
+    ("gemini", "GEMINI"), ("nvidia-nim", "NVIDIA"), ("openrouter", "OPENROUTER"),
+    ("deepseek-direct", "DEEPSEEK"),
 ])
 def test_server_cooldown_survives_restart_even_without_local_quotas(tmp_path, monkeypatch, name, prefix):
     monkeypatch.setattr(provider.os, "environ", {f"{prefix}_API_KEY": "test-key", f"{prefix}_OCR_MODEL": "test:free"})
