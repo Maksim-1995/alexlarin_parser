@@ -120,7 +120,7 @@ def test_inactive_providers_cannot_be_injected_into_settings(tmp_path, stage):
     assert "free_providers" not in settings.identity(stage)
 
 
-def free_client(context):
+def free_client(context, name="gemini"):
     reference = fixtures.FakeClient()
     session = Mock()
 
@@ -131,23 +131,24 @@ def free_client(context):
 
     session.post.side_effect = post
     settings = provider.DeepSeekSettings(api_key="", dpi=72, free_providers=(
-        provider._FreeProvider("gemini", "https://test.invalid/v1", "test-free", "vision", "text"),
+        provider._FreeProvider(name, "https://test.invalid/v1", "test-free", "vision:free", "text:free"),
     ))
     return provider.DeepSeekClient(settings, session=session)
 
 
-def test_free_result_keeps_actual_provider_provenance(project):
+@pytest.mark.parametrize("name", ["gemini", "nvidia-nim", "openrouter"])
+def test_free_result_keeps_actual_provider_provenance(project, name):
     base, contexts, _ = project
-    client = free_client(contexts[0])
+    client = free_client(contexts[0], name)
     report = pipeline.run_batch(base, contexts[:1], client=client, local_only=True)
     state = report["variants"][0]
-    assert {a["provider"] for a in state["attempts"]} == {"gemini"}
-    assert state["ocr_provenance"]["provider"] == "gemini"
-    assert state["classification_provenance"]["provider"] == "gemini"
-    assert [page["provider"] for page in state["ocr_provenance"]["pages"]] == ["gemini", "gemini"]
+    assert {a["provider"] for a in state["attempts"]} == {name}
+    assert state["ocr_provenance"]["provider"] == name
+    assert state["classification_provenance"]["provider"] == name
+    assert [page["provider"] for page in state["ocr_provenance"]["pages"]] == [name, name]
     for path in (base / "input" / "cache" / "model_responses").rglob("*.json"):
-        assert json.loads(path.read_text())["provenance"]["provider"] == "gemini"
-    cached_client = free_client(contexts[0])
+        assert json.loads(path.read_text())["provenance"]["provider"] == name
+    cached_client = free_client(contexts[0], name)
     cached_client.session.post.side_effect = AssertionError("Кэш не должен обращаться к модели")
     repeated = pipeline.run_batch(base, contexts[:1], client=cached_client, local_only=True)
     repeated_state = repeated["variants"][0]

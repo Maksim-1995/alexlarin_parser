@@ -299,6 +299,24 @@ def test_stage_specific_free_models_do_not_require_deepseek_key(tmp_path, chain_
     assert client.counter.ocr == client.counter.classification == 1
 
 
+@pytest.mark.parametrize("stage", ["ocr", "classification"])
+@pytest.mark.parametrize("failed_index", range(3))
+@pytest.mark.parametrize("failure", [429, 503, "timeout"])
+def test_each_free_provider_falls_back_on_http_or_timeout(tmp_path, chain_settings, stage, failed_index, failure):
+    settings = replace(chain_settings, api_key=TEST_KEY, free_providers=chain_settings.free_providers[failed_index:])
+    outcome = requests.ReadTimeout("подставной тайм-аут") if failure == "timeout" else FakeResponse(status=failure)
+    session = FakeSession(outcome, FakeResponse())
+    client = DeepSeekClient(settings, session=session)
+    response = client.request_json(MESSAGES, stage=stage, debug_dir=tmp_path)
+    order = [p.name for p in settings.free_providers] + ["deepseek-direct"]
+    assert [attempt["provider"] for attempt in client.attempts] == order[:2]
+    assert [attempt["status"] for attempt in client.attempts] == ["FAILED", "RECEIVED"]
+    assert response.provenance["provider"] == order[1]
+    assert len(session.calls) == client.counter.total == getattr(client.counter, stage) == 2
+    failed = next(event for event in client.provider_diagnostics if event["status"] == "FAILED")
+    assert failed["kind"] == ("timeout" if failure == "timeout" else "http")
+
+
 @pytest.mark.parametrize("missing_stage", ["ocr", "classification"])
 def test_missing_nvidia_model_skips_only_that_stage(tmp_path, chain_settings, monkeypatch, missing_stage):
     monkeypatch.setenv("GEMINI_API_KEY", "")

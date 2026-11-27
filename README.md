@@ -113,8 +113,8 @@ GEMINI_OCR_MODEL=
 GEMINI_CLASSIFICATION_MODEL=
 
 NVIDIA_API_KEY=
-NVIDIA_OCR_MODEL=qwen/qwen3.5-122b-a10b
-NVIDIA_CLASSIFICATION_MODEL=qwen/qwen3.5-122b-a10b
+NVIDIA_OCR_MODEL=
+NVIDIA_CLASSIFICATION_MODEL=
 
 OPENROUTER_API_KEY=
 OPENROUTER_OCR_MODEL=
@@ -141,22 +141,27 @@ OCR_DPI=300
 
 Для NVIDIA переиспользуется адаптер OpenAI Chat Completions:
 `POST https://integrate.api.nvidia.com/v1/chat/completions`.
-В шаблоне для обоих этапов выбрана `qwen/qwen3.5-122b-a10b`:
-[карточка модели](https://docs.api.nvidia.com/nim/reference/qwen-qwen3-5-122b-a10b)
-описывает текстовый и визуальный вход,
-[контракт API](https://docs.api.nvidia.com/nim/reference/qwen-qwen3-5-122b-a10b-infer)
-поддерживает `image_url` с base64 data URI. OCR передаёт PNG страниц/ответов,
+Модели этапов выбираются явно по актуальному
+[API-каталогу](https://integrate.api.nvidia.com/v1/models).
+Первоначальный кандидат `qwen/qwen3.5-122b-a10b` при реальном запросе вернул
+HTTP 410: модель снята с hosted API 20.07.2026, несмотря на доступную карточку.
+Поэтому шаблон оставляет модели пустыми. OCR передаёт PNG страниц/ответов,
 классификация — текстовый пакет всех условий. Форматы промптов и схем сохранены;
 NVIDIA не получает `thinking` и `response_format`. Модели этапов независимы:
 пустое `NVIDIA_OCR_MODEL` или `NVIDIA_CLASSIFICATION_MODEL` пропускает NVIDIA
 только для соответствующего этапа. Успех Gemini/NVIDIA не требует ключа DeepSeek.
 
-Это выбор по документированному контракту, а не подтверждение реального OCR
-или классификации. Подставные ответы проходят настоящие валидаторы обоих этапов;
-генерация JSON самой моделью, точность, доступ аккаунта, квоты и тариф требуют
-отдельной реальной проверки. Существующий `.env` автоматически не обновляется.
-Для будущего изолированного пилота нужны `NVIDIA_API_KEY` и обе переменные
-моделей выше; заполнение настроек само по себе запросов не отправляет.
+Изолированный пилот №41 проверил замену
+`nvidia/nemotron-3.5-super-vl-120b-a12b` через существующий адаптер без
+изменения его параметров. После подставного Gemini 503 реальный OCR страницы 1
+вернул HTTP 200 и прошёл схему, но исказил «австрийского» в «австралийского».
+Классификация 20 известных условий вернула HTTP 200, finish_reason=length:
+16 384 токена reasoning и пустой итоговый content; ответ корректно отклонён.
+Полный OCR и успешная классификация NVIDIA не подтверждены. Контракт модели
+описывает отдельный reasoning_effort, но его влияние в пилоте не проверялось.
+Тариф аккаунта и стоимость неизвестны. Доказательства — локальный
+`reports/nvidia_41_check/`; существующий `.env` не менялся.
+Заполнение `NVIDIA_API_KEY` и моделей само по себе запросов не отправляет.
 
 `nvidia/nemotron-3.5-parse` не используется: опубликованный
 [контракт](https://docs.api.nvidia.com/nim/reference/nvidia-nemotron-3_5-parse-infer)
