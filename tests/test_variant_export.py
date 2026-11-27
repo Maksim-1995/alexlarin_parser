@@ -239,6 +239,24 @@ def test_graph_raised_more_than_two_label_heights_belongs_to_next_task():
                                  anchors, given, 2, 842) == "B8"
 
 
+@pytest.mark.parametrize("first_condition, next_conditions, expected", [
+    ("Вычислите выражение", ["На рисунке изображён график функции"], "B8"),
+    ("На рисунке изображён график", ["На рисунке изображён график"], "B7"),
+    ("Вычислите выражение", ["Найдите объём"], "B7"),
+    ("Вычислите выражение", ["На рисунке график", "На рисунке другой график"], "B7"),
+])
+def test_raised_graph_uses_unique_overlapping_explicit_reference(first_condition, next_conditions, expected):
+    anchors = [{"source_label": "B7", "x": 438, "y": 44, "y1": 60},
+               {"source_label": "B8", "x": 438, "y": 98, "y1": 114}]
+    given = [{"source_label": "B7", "page_numbers": [2], "condition": first_condition},
+             {"source_label": "B8", "page_numbers": [2], "condition": next_conditions[0]}]
+    if len(next_conditions) > 1:
+        anchors.append({"source_label": "B9", "x": 438, "y": 180, "y1": 196})
+        given.append({"source_label": "B9", "page_numbers": [2], "condition": next_conditions[1]})
+    # Реальный макет №43: верх графика рядом с B7, текст B8 ниже на 54 пункта.
+    assert variant_export._owner(pymupdf.Rect(660, 37, 817, 224), anchors, given, 2, 842) == expected
+
+
 def test_vector_detection_excludes_table_grid_and_tall_radical_but_keeps_geometry():
     with pymupdf.open() as document:
         page = document.new_page(width=600, height=600)

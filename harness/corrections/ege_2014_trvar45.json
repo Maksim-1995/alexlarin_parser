@@ -1,0 +1,99 @@
+{
+  "version": 4,
+  "variant_key": "ege_2014_trvar45",
+  "source_url": "https://alexlarin.net/ege/2014/trvar45.html",
+  "pdf_sha256": "5796b8306536cb9637afceb431d49f693d4e45bd1c1e81fed9ecb6bd946f8207",
+  "corrections": [
+    {
+      "source_label": "B2",
+      "field": "topics_id",
+      "old": 19,
+      "new": "Чтение графиков и диаграмм",
+      "reason": "Ответ определяется сравнением столбцов диаграммы, а не арифметической текстовой моделью. Подходящего конечного листа темы в полном дереве нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar45.pdf",
+        "reports/pilot_42_45/evidence/v45_page_1.png",
+        "reports/pilot_42_45/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-27"
+    },
+    {
+      "source_label": "B4",
+      "field": "exams_id",
+      "old": 4,
+      "new": 22,
+      "reason": "Таблица цен задаёт простейшую арифметическую задачу о стоимости набора продуктов; числовая стоимость получается расчётом.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar45.pdf",
+        "reports/pilot_42_45/evidence/v45_page_2.png",
+        "reports/pilot_42_45/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-27"
+    },
+    {
+      "source_label": "C2",
+      "field": "condition",
+      "old": "В правильной треугольной пирамиде SABC с вершиной S угол между боковым ребром и плоскостью основания равен $60^0$, сторона основания равна 1, SH – высота пирамиды. Найдите площадь сечения пирамиды плоскостью, проходящей через точку H параллельно ребрам SA и BC.",
+      "new": "В правильной треугольной пирамиде SABC с вершиной S угол между боковым ребром и плоскостью основания равен $60^\\circ$, сторона основания равна 1, SH – высота пирамиды. Найдите площадь сечения пирамиды плоскостью, проходящей через точку H параллельно ребрам SA и BC.",
+      "reason": "Надстрочный ноль источника означает градусы.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar45.pdf",
+        "reports/pilot_42_45/evidence/v45_page_3.png"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-27"
+    },
+    {
+      "source_label": "C2",
+      "field": "topics_id",
+      "old": 571,
+      "new": 574,
+      "reason": "Сечение правильной треугольной пирамиды; перпендикулярность плоскостей из листа 571 не задана.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar45.pdf",
+        "reports/pilot_42_45/evidence/v45_page_3.png",
+        "reports/pilot_42_45/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-27"
+    },
+    {
+      "source_label": "C4",
+      "field": "answer",
+      "old": "а) $arctg 4$ б) $17$",
+      "new": "а) $\\operatorname{arctg}4$ б) $17$",
+      "reason": "Опубликованный arctg оформлен математическим оператором, значение не менялось.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar45.pdf",
+        "reports/pilot_42_45/evidence/v45_page_3.png",
+        "https://alexlarin.net/ege/2014/trvar45.png"
+      ],
+      "method": "published-source-transcription"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "",
+      "new": "а) За 18 попыток гарантированно узнать число нельзя.\nб) За 24 попытки можно.\nв) За 22 попытки получится.",
+      "reason": "В PNG ответа C6 нет; выводы перенесены из совпадающей опубликованной задачи МЦНМО 98524. Способ и доказательства остаются в публикации; собственное решение не добавлялось.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar45.pdf",
+        "reports/pilot_42_45/evidence/v45_page_3.png",
+        "https://problems.ru/view_problem_details_new.php?id=98524",
+        "reports/pilot_42_45/published_sources.json"
+      ],
+      "method": "published-source-transcription"
+    },
+    {
+      "source_label": "C6",
+      "field": "topics_id",
+      "old": 550,
+      "new": "Математические игры и стратегии",
+      "reason": "Задача о гарантированном угадывании числа и стратегии вопросов, а не о правилах суммы и произведения. Подходящего конечного листа в полном дереве нет.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar45.pdf",
+        "reports/pilot_42_45/evidence/v45_page_3.png",
+        "reports/pilot_42_45/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-27"
+    }
+  ]
+}

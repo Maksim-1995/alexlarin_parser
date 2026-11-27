@@ -2,6 +2,7 @@
 
 import math
 from pathlib import Path
+import re
 
 import pymupdf
 
@@ -42,7 +43,22 @@ def _owner(rect, anchors, tasks, page_number, page_width):
             and all(item["x"] < page_width / 2 for item in anchors)):
         return max(anchors, key=lambda item: item["y"])["source_label"]
     if above:
-        return max(above, key=lambda item: item["y"])["source_label"]
+        owner = max(above, key=lambda item: item["y"])
+        # График сбоку от текста может начинаться ещё у предыдущей задачи.
+        # Меняем геометрический выбор только при единственной явной ссылке
+        # внутри его высоты и отсутствии такой ссылки у прежнего владельца.
+        conditions = {task["source_label"]: task.get("condition", "") for task in tasks}
+        reference = re.compile(
+            r"на\s+рисунк[еах]|на\s+чертеже|(?:на|по)\s+график[еу]|изображ[её]н.{0,30}график",
+            re.IGNORECASE,
+        )
+        if not reference.search(conditions.get(owner["source_label"], "")):
+            candidates = [item for item in same_column
+                          if owner["y"] < item["y"] < rect.y1
+                          and reference.search(conditions.get(item["source_label"], ""))]
+            if len(candidates) == 1:
+                return candidates[0]["source_label"]
+        return owner["source_label"]
     # Продолжение задачи может начинаться с рисунка в соседней колонке
     # перед первой новой меткой. Это всё ещё та же задача.
     if column > 0:

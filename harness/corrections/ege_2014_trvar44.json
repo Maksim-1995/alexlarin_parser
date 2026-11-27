@@ -1,0 +1,163 @@
+{
+  "version": 4,
+  "variant_key": "ege_2014_trvar44",
+  "source_url": "https://alexlarin.net/ege/2014/trvar44.html",
+  "pdf_sha256": "87adc2f607850cb72caaa9e7e79002eeb23ebe8b2622c1a505fa85a83f7cb518",
+  "corrections": [
+    {
+      "source_label": "B4",
+      "field": "exams_id",
+      "old": 92,
+      "new": 22,
+      "reason": "Прямой арифметический расчёт двух стоимостей, без финансовой оптимизационной модели и развёрнутой задачи С5.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar44.pdf",
+        "reports/pilot_42_45/evidence/v44_page_2.png",
+        "reports/pilot_42_45/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-27"
+    },
+    {
+      "source_label": "B4",
+      "field": "topics_id",
+      "old": 141,
+      "new": 19,
+      "reason": "Стоимость материалов вычисляется действиями с натуральными числами; существует соответствующий конкретный арифметический лист.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar44.pdf",
+        "reports/pilot_42_45/evidence/v44_page_2.png",
+        "reports/pilot_42_45/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-27"
+    },
+    {
+      "source_label": "B7",
+      "field": "topics_id",
+      "old": 92,
+      "new": 91,
+      "reason": "В выражении присутствуют sin(2*84°) и cos(90°−84°); основное преобразование — формула двойного аргумента.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar44.pdf",
+        "reports/pilot_42_45/evidence/v44_page_2.png",
+        "reports/pilot_42_45/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-27"
+    },
+    {
+      "source_label": "B9",
+      "field": "topics_id",
+      "old": 618,
+      "new": "Объём шара",
+      "reason": "Требуется сумма объёмов шаров, а лист 618 о взаимном расположении сферы и плоскости не подходит. В полном дереве нет листа об объёме шара.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar44.pdf",
+        "reports/pilot_42_45/evidence/v44_page_2.png",
+        "reports/pilot_42_45/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-27"
+    },
+    {
+      "source_label": "B11",
+      "field": "exams_id",
+      "old": 188,
+      "new": 184,
+      "reason": "Требуется изменение площади поверхности октаэдра; это многогранник, а не комбинация круглых тел.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar44.pdf",
+        "reports/pilot_42_45/evidence/v44_page_2.png",
+        "reports/pilot_42_45/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-27"
+    },
+    {
+      "source_label": "B13",
+      "field": "topics_id",
+      "old": 12,
+      "new": 68,
+      "reason": "Сопоставляются времена двух поездок одного велосипедиста с остановкой; задачи на сближение и удаление здесь нет. Рациональное уравнение моделирует реальные времена.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar44.pdf",
+        "reports/pilot_42_45/evidence/v44_page_3.png",
+        "reports/pilot_42_45/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-27"
+    },
+    {
+      "source_label": "B14",
+      "field": "exams_id",
+      "old": 160,
+      "new": 87,
+      "reason": "Исследуется рациональная функция 324/x+x+6, соответствует существующей категории исследования частных.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar44.pdf",
+        "reports/pilot_42_45/evidence/v44_page_3.png",
+        "reports/pilot_42_45/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-27"
+    },
+    {
+      "source_label": "C2",
+      "field": "condition",
+      "old": "В тетраэдре ABCD на ребре AB взята точка K, на ребре AC — точка L, на ребре BD — точка N, на ребре CD — точка M. Точки E и G есть середины ребер AD и BC соответственно. Прямые EG, KM и LN пересекаются в одной точке. Нати площадь четырехугольника KLMN, если AK:KB=5, AD=9, BC=9, а угол между скрещивающимися прямыми AD и BC равен $45^0$",
+      "new": "В тетраэдре ABCD на ребре AB взята точка K, на ребре AC — точка L, на ребре BD — точка N, на ребре CD — точка M. Точки E и G есть середины ребер AD и BC соответственно. Прямые EG, KM и LN пересекаются в одной точке. Нати площадь четырехугольника KLMN, если AK:KB=5, AD=9, BC=9, а угол между скрещивающимися прямыми AD и BC равен $45^\\circ$",
+      "reason": "Угол между AD и BC равен 45 градусам; надстрочный ноль заменён знаком градуса.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar44.pdf",
+        "reports/pilot_42_45/evidence/v44_page_3.png"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-27"
+    },
+    {
+      "source_label": "C2",
+      "field": "exams_id",
+      "old": 222,
+      "new": 212,
+      "reason": "Четырёхугольник KLMN — сечение тетраэдра, требуется площадь сечения пирамиды.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar44.pdf",
+        "reports/pilot_42_45/evidence/v44_page_3.png",
+        "reports/pilot_42_45/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-27"
+    },
+    {
+      "source_label": "C2",
+      "field": "topics_id",
+      "old": 571,
+      "new": 574,
+      "reason": "Тетраэдр и его сечение; перпендикулярность плоскостей из листа 571 не задана и не является предметом задачи.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar44.pdf",
+        "reports/pilot_42_45/evidence/v44_page_3.png",
+        "reports/pilot_42_45/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-27"
+    },
+    {
+      "source_label": "C6",
+      "field": "topics_id",
+      "old": 637,
+      "new": 138,
+      "reason": "Операции с произвольными положительными действительными x,y и тождества для квадратов и произведения; делимость целых чисел не относится к условию.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar44.pdf",
+        "reports/pilot_42_45/evidence/v44_page_3.png",
+        "reports/pilot_42_45/catalogues.json; полные data/exams.csv и data/topics.csv"
+      ],
+      "method": "manual-source-and-full-catalogue-review, 2026-11-27"
+    },
+    {
+      "source_label": "C6",
+      "field": "answer",
+      "old": "Можно. Например, так (числа записаны в порядке их появления): $\\frac{1}{x}, x+1, \\frac{1}{x+1}, \\frac{1}{x} - \\frac{1}{x+1} = \\frac{1}{x^2+x}, x^2+x, (x^2+x)-x=x^2$. Разделим одно из чисел на 2: $\\frac{1}{y}, \\frac{1}{y}, \\frac{2}{y}, \\frac{y}{2}$. Далее, умея возводить в квадрат, за несколько шагов получим число $\\left(x+\\frac{y}{2}\\right)^2 - x^2 - \\left(\\frac{y}{2}\\right)^2 = xy$. Или так: получаем число $(x+y)^2-(x-y)^2=4xy$, а затем два раза делим его пополам.",
+      "new": "а) Можно.\nб) Можно.",
+      "reason": "Опубликованная PNG даёт оба построения. В краткий ответ перенесены их выводы, решение не помещается в поле answer; исходная подробная транскрипция модели сохранена.",
+      "evidence": [
+        "https://alexlarin.net/ege/2014/trvar44.pdf",
+        "reports/pilot_42_45/evidence/v44_page_3.png",
+        "https://alexlarin.net/ege/2014/trvar44.png"
+      ],
+      "method": "published-source-transcription"
+    }
+  ]
+}
