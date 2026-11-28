@@ -143,6 +143,11 @@ DEEPSEEK_CLASSIFICATION_THINKING=disabled
 OCR_DPI=300
 ```
 
+OpenRouter принимает ключ как `OPENROUTER_API_KEY` или `OPEN_ROUTER_API_KEY`.
+Непустое стандартное имя `OPENROUTER_API_KEY` имеет приоритет; пустое значение
+позволяет использовать второе имя. Модели этапов по-прежнему задаются через
+`OPENROUTER_OCR_MODEL` и `OPENROUTER_CLASSIFICATION_MODEL`.
+
 Секрет заполняется только локально. Ранее использовавшийся
 `DEEPSEEK_REQUEST_TIMEOUT` принимается как запасное имя тайм-аута чтения.
 Один `DeepSeekClient` обслуживает OCR и классификацию всего последовательного

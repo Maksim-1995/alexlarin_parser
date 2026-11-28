@@ -92,10 +92,18 @@ class _FreeProvider:
         return self.ocr_model if stage == "ocr" else self.classification_model
 
 
+def _provider_api_key(prefix):
+    """Стандартное имя ключа приоритетно; OpenRouter принимает прежнее имя."""
+    key = os.environ.get(f"{prefix}_API_KEY", "").strip()
+    if not key and prefix == "OPENROUTER":
+        key = os.environ.get("OPEN_ROUTER_API_KEY", "").strip()
+    return key
+
+
 def _load_free_providers():
     providers = []
     for name, prefix, base_url in _ACTIVE_FREE_ENDPOINTS:
-        api_key = os.environ.get(f"{prefix}_API_KEY", "").strip()
+        api_key = _provider_api_key(prefix)
         ocr_model = os.environ.get(f"{prefix}_OCR_MODEL", "").strip()
         classification_model = os.environ.get(
             f"{prefix}_CLASSIFICATION_MODEL", ""
@@ -122,7 +130,8 @@ def _load_configuration_issues():
         for stage in ("ocr", "classification"):
             missing = [variable for variable in (
                 f"{prefix}_API_KEY", f"{prefix}_{stage.upper()}_MODEL"
-            ) if not os.environ.get(variable, "").strip()]
+            ) if not (_provider_api_key(prefix) if variable == f"{prefix}_API_KEY"
+                      else os.environ.get(variable, "").strip())]
             if missing:
                 issues.append((name, stage, "Не заданы: " + ", ".join(missing)))
     return tuple(issues)

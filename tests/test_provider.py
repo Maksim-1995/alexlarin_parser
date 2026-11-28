@@ -257,6 +257,22 @@ def chain_settings(tmp_path, monkeypatch):
     return DeepSeekSettings.from_env(tmp_path)
 
 
+@pytest.mark.parametrize("canonical,expected", [(None, "alias-test"), ("", "alias-test"),
+                                               ("  ", "alias-test"), ("canonical-test", "canonical-test")])
+def test_openrouter_key_alias_and_canonical_precedence(tmp_path, monkeypatch, canonical, expected):
+    monkeypatch.setattr(os, "environ", {})
+    (tmp_path / ".env").write_text("OPEN_ROUTER_API_KEY=alias-test\n"
+                                  "OPENROUTER_OCR_MODEL=test-model:free\n"
+                                  "OPENROUTER_CLASSIFICATION_MODEL=test-model:free\n")
+    if canonical is not None:
+        monkeypatch.setenv("OPENROUTER_API_KEY", canonical)
+    settings = DeepSeekSettings.from_env(tmp_path)
+    selected, = settings.free_providers
+    assert selected.name == "openrouter" and selected.api_key == expected
+    assert not any(name == "openrouter" for name, _, _ in settings.configuration_issues)
+    assert expected not in repr(settings) and expected not in json.dumps(settings.identity("ocr"))
+
+
 @pytest.mark.parametrize("stage", ["ocr", "classification"])
 @pytest.mark.parametrize("successful_index", range(4))
 def test_chain_order_first_success_payload_and_actual_attempts(tmp_path, chain_settings, stage, successful_index):
