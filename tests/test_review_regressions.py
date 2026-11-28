@@ -30,7 +30,7 @@ def test_restored_openrouter_route_through_normal_pipeline(project, monkeypatch,
     monkeypatch.setattr(provider.os, "environ", {})
     values = {"OCR_DPI": "72", "DEEPSEEK_API_KEY": "test-paid",
               "DEEPSEEK_CLASSIFICATION_THINKING": "enabled"}
-    for prefix in ("GEMINI", "NVIDIA", "GROQ", "OPENROUTER"):
+    for prefix in ("GEMINI", "NVIDIA", "OPENROUTER"):
         values[f"{prefix}_API_KEY"] = f"test-{prefix}"
         for current in ("ocr", "classification"):
             values[f"{prefix}_{current.upper()}_MODEL"] = (
@@ -109,15 +109,15 @@ def test_restored_openrouter_route_through_normal_pipeline(project, monkeypatch,
 
 
 @pytest.mark.parametrize("stage", ["ocr", "classification"])
-def test_inactive_providers_cannot_be_injected_into_settings(tmp_path, stage):
+def test_groq_can_be_injected_into_settings(tmp_path, stage):
     settings = provider.DeepSeekSettings(api_key="test-paid", free_providers=tuple(
         provider._FreeProvider(name, f"https://{name}.invalid/v1", "test-key", "vision", "text")
         for name in ("groq",)))
     session = wire.FakeSession(wire.FakeResponse())
     client = provider.DeepSeekClient(settings, session=session)
     client.request_json(wire.MESSAGES, stage=stage, debug_dir=tmp_path)
-    assert [a["provider"] for a in client.attempts] == ["deepseek-direct"]
-    assert "free_providers" not in settings.identity(stage)
+    assert [a["provider"] for a in client.attempts] == ["groq"]
+    assert settings.identity(stage)["free_providers"][0]["provider"] == "groq"
 
 
 def free_client(context, name="gemini"):
@@ -299,7 +299,7 @@ def test_shared_cache_checks_provenance_integrity_and_accepts_old_records(tmp_pa
 
 
 @pytest.mark.parametrize("name,prefix", [
-    ("gemini", "GEMINI"), ("nvidia-nim", "NVIDIA"), ("openrouter", "OPENROUTER"),
+    ("gemini", "GEMINI"), ("nvidia-nim", "NVIDIA"), ("groq", "GROQ"), ("openrouter", "OPENROUTER"),
     ("deepseek-direct", "DEEPSEEK"),
 ])
 def test_server_cooldown_survives_restart_even_without_local_quotas(tmp_path, monkeypatch, name, prefix):

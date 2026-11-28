@@ -15,6 +15,7 @@ from threading import Lock
 
 import requests
 from requests.adapters import HTTPAdapter
+from .curl_transport import CurlAdapter
 
 from .requests_counter import AIRequestCounter
 from .io import atomic_json
@@ -55,12 +56,34 @@ _FREE_ENDPOINTS = (
     ("groq", "GROQ", "https://api.groq.com/openai/v1"),
     ("openrouter", "OPENROUTER", "https://openrouter.ai/api/v1"),
 )
-# Реализации оставлены для совместимости, но их конфигурация не включает
-# провайдеров в рабочий маршрут, даже если старые ключи/модели заполнены.
-_INACTIVE_PROVIDERS = frozenset({"groq"})
+# Зарезервировано для временного исключения провайдеров из маршрута.
+_INACTIVE_PROVIDERS = frozenset()
 _ACTIVE_FREE_ENDPOINTS = tuple(
     endpoint for endpoint in _FREE_ENDPOINTS if endpoint[0] not in _INACTIVE_PROVIDERS
 )
+OPENROUTER_DEFAULT_MODELS = {
+    "ocr": "nvidia/nemotron-3.5-super-vl:free",
+    "classification": "particle-ai/particle-1:free",
+}
+GROQ_DEFAULT_MODELS = {
+    "ocr": "qwen/qwen3.8-27b",
+    "classification": "openai/gpt-oss-120b",
+}
+
+
+def _provider_model(prefix, stage):
+    default = {"OPENROUTER": OPENROUTER_DEFAULT_MODELS,
+               "GROQ": GROQ_DEFAULT_MODELS}.get(prefix, {}).get(stage, "")
+    # Явно пустая переменная отключает этап; отсутствующая выбирает профиль.
+    return os.environ.get(f"{prefix}_{stage.upper()}_MODEL", default).strip()
+
+
+def _request_options(provider, model, stage):
+    if provider == "groq" and model == GROQ_DEFAULT_MODELS["ocr"]:
+        return {"reasoning_effort": "none"}
+    if provider == "openrouter" and stage == "ocr" and model == OPENROUTER_DEFAULT_MODELS["ocr"]:
+        return {"reasoning": {"effort": "none"}}
+    return {}
 
 
 def _load_rate_limits():
@@ -104,10 +127,8 @@ def _load_free_providers():
     providers = []
     for name, prefix, base_url in _ACTIVE_FREE_ENDPOINTS:
         api_key = _provider_api_key(prefix)
-        ocr_model = os.environ.get(f"{prefix}_OCR_MODEL", "").strip()
-        classification_model = os.environ.get(
-            f"{prefix}_CLASSIFICATION_MODEL", ""
-        ).strip()
+        ocr_model = _provider_model(prefix, "ocr")
+        classification_model = _provider_model(prefix, "classification")
         if not api_key or not (ocr_model or classification_model):
             continue
 
@@ -131,7 +152,7 @@ def _load_configuration_issues():
             missing = [variable for variable in (
                 f"{prefix}_API_KEY", f"{prefix}_{stage.upper()}_MODEL"
             ) if not (_provider_api_key(prefix) if variable == f"{prefix}_API_KEY"
-                      else os.environ.get(variable, "").strip())]
+                      else _provider_model(prefix, stage))]
             if missing:
                 issues.append((name, stage, "Не заданы: " + ", ".join(missing)))
     return tuple(issues)
@@ -252,7 +273,8 @@ class DeepSeekSettings:
             "response_format": {"type": "json_object"},
         }
         free = [
-            {"provider": provider.name, "base_url": provider.base_url, "model": model}
+            {"provider": provider.name, "base_url": provider.base_url, "model": model,
+             **_request_options(provider.name, model, stage)}
             for provider in self.free_providers
             if (model := provider.model_for(stage))
         ]
@@ -281,6 +303,7 @@ class DeepSeekClient:
         self.session = session if session is not None else requests.Session()
         if session is None:
             self.session.mount("https://", HTTPAdapter(max_retries=0))
+            self.session.mount("https://api.groq.com/", CurlAdapter())
         self.counter = counter if counter is not None else AIRequestCounter()
         self.attempts = []
         self.provider_diagnostics = []
@@ -404,6 +427,7 @@ class DeepSeekClient:
         }
         if provider != "nvidia-nim":
             payload["response_format"] = {"type": "json_object"}
+        payload.update(_request_options(provider, model, stage))
         if paid:
             thinking = (
                 "disabled" if stage == "ocr" else self.settings.classification_thinking

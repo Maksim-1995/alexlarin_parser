@@ -17,7 +17,7 @@ from alexlarin_parser import provider, rate_limits
 from alexlarin_parser.paths import PROJECT_ROOT
 
 
-PROVIDERS = ("gemini", "nvidia-nim", "openrouter", "deepseek-direct")
+PROVIDERS = ("gemini", "nvidia-nim", "groq", "openrouter", "deepseek-direct")
 TEST_KEY = "process-test-not-a-real-key"
 
 

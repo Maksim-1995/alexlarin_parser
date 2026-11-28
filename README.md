@@ -3,21 +3,33 @@
 Парсер получает условия из изображений PDF, извлекает опубликованные ответы,
 классифицирует задачи и формирует Excel с рисунками и отдельный ZIP.
 Основной конвейер использует настроенные этапы цепочки
-**Gemini → NVIDIA NIM → OpenRouter `:free` → платный DeepSeek**.
+**Gemini → NVIDIA NIM → Groq → OpenRouter `:free` → платный DeepSeek**.
 
 | Провайдер | Где используется | Ключ окружения |
 |---|---|---|
 | Gemini | Первый настроенный провайдер этапа; также прежние утилиты и совместимость кэшей 542 | `GEMINI_API_KEY` |
 | NVIDIA NIM | Следующий провайдер; также отдельный профиль `check_deepseek.py --provider nvidia` | `NVIDIA_API_KEY` |
-| OpenRouter | После NVIDIA; только явные модели этапов с суффиксом `:free` | `OPENROUTER_API_KEY` |
-| Groq | Временно исключён из рабочего маршрута; его ключи, модели и квоты окружения игнорируются | — |
+| OpenRouter | После Groq; только явные модели этапов с суффиксом `:free` | `OPENROUTER_API_KEY` |
+| Groq | После NVIDIA; OCR Qwen3.8-27B, классификация GPT-OSS 120B; HTTP через `curl` | `GROQ_API_KEY` |
 | DeepSeek | Последний, платный резерв OCR/классификации | `DEEPSEEK_API_KEY` |
 
-Бесплатный провайдер включается только при наличии ключа и явной модели этапа:
+Провайдер включается при наличии ключа и модели этапа:
 `<PREFIX>_OCR_MODEL` и/или `<PREFIX>_CLASSIFICATION_MODEL`, где PREFIX —
-GEMINI, NVIDIA, OPENROUTER. Одного ключа недостаточно. Модель OCR должна
+GEMINI, NVIDIA, GROQ, OPENROUTER. Для Gemini/NVIDIA одного ключа недостаточно.
+Groq и OpenRouter при отсутствии переменной модели используют выбранный профиль
+по умолчанию; явно пустая переменная отключает этап. Модель OCR должна
 поддерживать изображения. Работоспособность выбранных моделей и доступ аккаунта
 нужно проверять отдельно; локальные тесты используют подставной транспорт.
+
+Groq: `GROQ_OCR_MODEL=qwen/qwen3.8-27b` (reasoning_effort=none),
+`GROQ_CLASSIFICATION_MODEL=openai/gpt-oss-120b`. Это значения по умолчанию;
+явное значение приоритетно, пустое отключает этап. Требуется установленный
+`curl`: он используется только для Groq, без повторов и перенаправлений.
+Ключ и JSON передаются через stdin; квоты, cooldown, проверка ответа и учёт
+попыток общие с остальной цепочкой. Лимит токенов аккаунта может ограничить
+полный запрос классификации даже при достаточном контексте модели.
+Короткий curl-запрос подтвердил доступ к GPT-OSS 120B; качество Groq OCR
+и классификации полного варианта ещё требует отдельного пилота.
 
 Созданы пилотные выгрузки основных вариантов №1–12. Последний пакет №6–12
 содержит замечания к OCR и классификации и остаётся `NEEDS_REVIEW`.
@@ -128,8 +140,8 @@ NVIDIA_OCR_MODEL=
 NVIDIA_CLASSIFICATION_MODEL=
 
 OPENROUTER_API_KEY=
-OPENROUTER_OCR_MODEL=
-OPENROUTER_CLASSIFICATION_MODEL=
+OPENROUTER_OCR_MODEL=nvidia/nemotron-3.5-super-vl:free
+OPENROUTER_CLASSIFICATION_MODEL=particle-ai/particle-1:free
 
 # Настройки основного DeepSeek-клиента.
 DEEPSEEK_BASE_URL=https://api.deepseek.com
@@ -147,6 +159,16 @@ OpenRouter принимает ключ как `OPENROUTER_API_KEY` или `OPEN_
 Непустое стандартное имя `OPENROUTER_API_KEY` имеет приоритет; пустое значение
 позволяет использовать второе имя. Модели этапов по-прежнему задаются через
 `OPENROUTER_OCR_MODEL` и `OPENROUTER_CLASSIFICATION_MODEL`.
+
+Выбранные профили OpenRouter подключены в коде: OCR использует
+`nvidia/nemotron-3.5-super-vl:free` с `reasoning.effort=none`, классификация —
+`particle-ai/particle-1:free` без переопределения reasoning. Переменные моделей
+позволяют переопределить выбор; явно пустое значение отключает этап.
+Параметры reasoning входят в identity кэша OCR, поэтому ответ другого режима
+не переиспользуется как совместимый. Остальные модели и провайдеры этот
+параметр не получают; поле `thinking` по-прежнему отправляется только DeepSeek.
+Это кандидаты с ручной проверкой качества; результаты пилота и ограничения
+сохранены в `reports/openrouter_free_comparison/selection.json`.
 
 Секрет заполняется только локально. Ранее использовавшийся
 `DEEPSEEK_REQUEST_TIMEOUT` принимается как запасное имя тайм-аута чтения.

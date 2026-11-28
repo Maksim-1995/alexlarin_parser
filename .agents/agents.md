@@ -275,12 +275,17 @@ PDF, HTML, JSON, логи, источники и preview в итоговый ZIP
 ## 9. Провайдеры, конфигурация и бюджет
 
 Основной последовательный CLI использует один DeepSeekClient на пакет:
-Gemini → NVIDIA NIM → OpenRouter `:free` → платный DeepSeek. Groq временно исключён
-из рабочего маршрута, даже при заполненных ключе/моделях; его настройки
-окружения и квоты игнорируются. Ограничение действует и для прямого
-создания DeepSeekSettings; реализации адаптеров сохранены.
-Бесплатный провайдер участвует только при наличии ключа и явной модели этапа
+Gemini → NVIDIA NIM → Groq → OpenRouter `:free` → платный DeepSeek.
+Groq включён: OCR qwen/qwen3.8-27b (reasoning_effort=none), классификация
+openai/gpt-oss-120b. При отсутствии переменной модели используется этот профиль;
+пустая отключает этап. Groq использует curl через адаптер общей сессии,
+ключ и тело в stdin, без повторов/redirect; квоты/cooldown общие.
+Gemini/NVIDIA участвуют только при наличии ключа и явной модели этапа
 (`<PREFIX>_API_KEY`, `<PREFIX>_OCR_MODEL`, `<PREFIX>_CLASSIFICATION_MODEL`).
+OpenRouter использует встроенные модели при отсутствии переменных моделей:
+Super VL :free для OCR (reasoning.effort=none), Particle-1 :free для
+классификации (reasoning по умолчанию). Явно пустая переменная модели
+отключает этап. Профиль входит в HTTP payload и identity кэша.
 Порядок фиксирован. Первому успешному ответу достаточно завершить цепочку;
 ключ DeepSeek для него не нужен. 429/503/тайм-аут временно исключают
 провайдера, Retry-After учитывается числом и HTTP-датой. 401/403 отключают
@@ -1592,6 +1597,54 @@ classification_review.json. Категории не исправлялись а�
   компиляция и git diff --check успешны. Временные консольные логи /tmp
   к продолжению не сохранились; исходные JSON-журналы сохранены.
   Коммит/push не выполнялись.
+
+### Подключение выбранных OpenRouter-профилей — 28.11.2026
+
+- По поручению пользователя в provider.py подключены модели по умолчанию:
+  OCR nvidia/nemotron-3.5-super-vl:free с reasoning.effort=none;
+  классификация particle-ai/particle-1:free без переопределения reasoning.
+  Явная модель из окружения приоритетна; пустое значение отключает этап.
+  Ключ обязателен, поддерживаются оба имени OpenRouter API key.
+- reasoning добавляется только выбранному OpenRouter OCR-профилю и входит
+  в identity кэша. Gemini/NVIDIA/DeepSeek и другие модели не получают этот
+  параметр. thinking остаётся только у DeepSeek. Старые кэши не редактировались.
+- Существующий порядок Gemini → NVIDIA NIM → OpenRouter → DeepSeek сохранён.
+  В текущем локальном .env модели NVIDIA не заданы, поэтому фактические цепочки:
+  Gemini → OpenRouter Super VL → DeepSeek (OCR),
+  Gemini → OpenRouter Particle → DeepSeek (классификация).
+  Рабочий .env и настройки Gemini/NVIDIA/DeepSeek не менялись.
+- Добавлены 5 сценариев: профили/HTTP/identity, приоритет явных моделей,
+  отключение этапа и fallback после Gemini/NVIDIA на обоих этапах.
+  Целевой запуск до последних двух сценариев: 226 passed. Полная регрессия
+  итогового runtime: 759 passed, 11 subtests passed, 41.29 с.
+  Все ответы подставные, реальные API — 0. Компиляция и git diff --check
+  успешны. Доказательства: reports/openrouter_profiles_connected/checks.json.
+  Кандидатный статус и необходимость ручной сверки сохранены. Коммит/push нет.
+
+### Подключение Groq — 28.11.2026
+
+- По поручению пользователя Groq включён после NVIDIA перед OpenRouter.
+  Профили по умолчанию: OCR qwen/qwen3.8-27b с reasoning_effort=none,
+  классификация openai/gpt-oss-120b. Явная модель приоритетна; пустая
+  отключает этап. reason-параметр включён в identity, старые кэши сохранены.
+- CurlAdapter монтируется только на https://api.groq.com/ в обычной сессии.
+  curl --disable --config - получает ключ и тело через stdin; без повторов
+  и redirect, с connect/total timeout. User-Agent остаётся curl, сжатие
+  отключено через Accept-Encoding: identity. stderr не публикуется.
+  HTTP/timeout/network используют существующие квоты, cooldown и fallback.
+- Причина curl: короткий запрос GPT-OSS 120B дал HTTP 200, тогда как requests
+  возвращал 403 даже с User-Agent curl. Точная причина различия не установлена.
+  Доказательства доступа: reports/groq_candidates/curl_access_20261128T113219Z/checks.json
+  и reports/groq_candidates/client_comparison_20261128T113249Z.json.
+- Рабочий .env не менялся. С текущими моделями реальный настроенный маршрут:
+  Gemini → Groq → OpenRouter → DeepSeek; NVIDIA пропускается без моделей этапов.
+  Groq OCR и полный запрос классификации ещё не проходили реальный пилот;
+  лимит TPM аккаунта может ограничить большой запрос независимо от контекста.
+- Добавлены проверки curl payload/секретов/профилей/identity, ошибок процесса,
+  fallback/cooldown и обычного pipeline с настоящими валидаторами обоих этапов.
+  Межпроцессные квоты и cooldown распространены на Groq. Все ответы подставные,
+  новых запросов к модельным API нет. Проверки и текущий маршрут сохранены
+  в reports/groq_connected/checks.json; коммит/push не выполнялись.
 
 ### Рекомендуемый следующий этап, если пользователь поручит исправление качества
 

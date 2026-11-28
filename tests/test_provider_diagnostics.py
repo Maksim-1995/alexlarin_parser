@@ -54,6 +54,7 @@ def test_pipeline_error_keeps_http_failure_and_each_configuration_skip(project, 
     assert [(d["provider"], d["status"], d["kind"]) for d in diagnostics] == [
         ("gemini", "FAILED", "http"),
         ("nvidia-nim", "SKIPPED", "configuration"),
+        ("groq", "SKIPPED", "configuration"),
         ("openrouter", "SKIPPED", "configuration"),
         ("deepseek-direct", "SKIPPED", "configuration"),
     ]
@@ -90,8 +91,8 @@ def test_final_error_collects_timeout_http_validation_and_paid_block(tmp_path, m
     message = str(failure.value)
     assert all(fragment in message for fragment in (stage, "503", "ReadTimeout", "проверку схемы", "401"))
     assert "private-request-details" not in message and "test-OPENROUTER" not in message
-    assert [d["kind"] for d in client.provider_diagnostics] == ["http", "timeout", "validation", "http"]
-    assert all(d["status"] == "FAILED" for d in client.provider_diagnostics)
+    assert [d["kind"] for d in client.provider_diagnostics] == ["http", "timeout", "configuration", "validation", "http"]
+    assert all(d["status"] == "FAILED" for d in client.provider_diagnostics if d["provider"] != "groq")
     assert len(session.calls) == client.counter.total == len(client.attempts) == 4
 
 
@@ -117,7 +118,7 @@ def test_skips_explain_reason_without_counting_http_or_reusing_previous_stage(tm
     with pytest.raises(provider.ProviderError) as failure:
         client.request_json(wire.MESSAGES, stage="classification", debug_dir=tmp_path / "second")
     events = client.provider_diagnostics[offset:]
-    assert len(events) == 4 and all(event["stage"] == "classification" for event in events)
+    assert len(events) == 5 and all(event["stage"] == "classification" for event in events)
     assert events[0]["kind"] == blocker and events[0]["status"] == "SKIPPED"
     assert ("RPD" if blocker == "quota" else "cooldown" if blocker == "cooldown" else "403") in events[0]["reason"]
     assert "classification" in str(failure.value) and "ocr" not in str(failure.value)
@@ -134,7 +135,7 @@ def test_success_keeps_preceding_skips_and_marks_unneeded_providers(tmp_path, mo
     client.request_json(wire.MESSAGES, stage="ocr", debug_dir=tmp_path / "debug")
     assert [(d["provider"], d["status"], d["kind"]) for d in client.provider_diagnostics] == [
         ("gemini", "SKIPPED", "configuration"), ("nvidia-nim", "RECEIVED", "http"),
-        ("openrouter", "SKIPPED", "not_needed"), ("deepseek-direct", "SKIPPED", "not_needed"),
+        ("groq", "SKIPPED", "not_needed"), ("openrouter", "SKIPPED", "not_needed"), ("deepseek-direct", "SKIPPED", "not_needed"),
     ]
     assert client.counter.total == 1
 
