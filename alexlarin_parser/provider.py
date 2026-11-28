@@ -158,6 +158,20 @@ def _load_configuration_issues():
     return tuple(issues)
 
 
+def _groq_messages(messages):
+    """Adapt DeepSeek's original image detail without mutating shared inputs."""
+    return [
+        {**message, "content": [
+            {**part, "image_url": {**part["image_url"], "detail": "high"}}
+            if (isinstance(part, dict) and part.get("type") == "image_url"
+                and isinstance(part.get("image_url"), dict)
+                and part["image_url"].get("detail") == "original") else part
+            for part in message["content"]
+        ]} if isinstance(message.get("content"), list) else message
+        for message in messages
+    ]
+
+
 def _retry_delay(headers):
     value = headers.get("Retry-After")
     if not value:
@@ -274,7 +288,8 @@ class DeepSeekSettings:
         }
         free = [
             {"provider": provider.name, "base_url": provider.base_url, "model": model,
-             **_request_options(provider.name, model, stage)}
+             **_request_options(provider.name, model, stage),
+             **({"image_detail": "high"} if provider.name == "groq" and stage == "ocr" else {})}
             for provider in self.free_providers
             if (model := provider.model_for(stage))
         ]
@@ -420,7 +435,7 @@ class DeepSeekClient:
         token_field = "max_completion_tokens" if provider == "groq" else "max_tokens"
         payload = {
             "model": model,
-            "messages": messages,
+            "messages": _groq_messages(messages) if provider == "groq" else messages,
             "temperature": 0,
             token_field: self.settings.max_tokens,
             "stream": False,
@@ -472,6 +487,12 @@ class DeepSeekClient:
             )
             status = response.status_code
             attempt["http_status"] = status
+            if provider == "groq":
+                # Persist only diagnostic headers, never Authorization/cookies.
+                attempt["rate_limit_headers"] = {
+                    key.lower(): value for key, value in response.headers.items()
+                    if key.lower().startswith("x-ratelimit-") or key.lower() == "retry-after"
+                }
             if not 200 <= status < 300:
                 attempt["error_kind"] = "http"
 
@@ -501,7 +522,14 @@ class DeepSeekClient:
             if paid and self.blocked:
                 raise PaidCallsBlocked(self.blocked)
             if not 200 <= status < 300:
-                raise ProviderError(f"{provider} HTTP {status}")
+                detail = ""
+                if provider == "groq" and isinstance(body, dict) and isinstance(body.get("error"), dict):
+                    api_error = {key: _redact(value[:2000], api_key)
+                                 for key, value in body["error"].items()
+                                 if key in {"message", "type", "code"} and isinstance(value, str)}
+                    attempt["api_error"] = api_error
+                    detail = ": " + api_error["message"] if api_error.get("message") else ""
+                raise ProviderError(f"{provider} HTTP {status}{detail}")
 
             choices = body.get("choices") if isinstance(body, dict) else None
             if not isinstance(choices, list) or len(choices) != 1:

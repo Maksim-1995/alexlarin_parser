@@ -143,3 +143,82 @@ def test_normal_pipeline_completes_both_stages_through_groq_curl(tmp_path, monke
     assert state["ocr_provenance"]["provider"] == state["classification_provenance"]["provider"] == "groq"
     assert len(calls) == report["ocr_calls"] + report["classification_calls"] == 3
     assert all(attempt["provider"] == "groq" for attempt in state["attempts"])
+
+
+def test_groq_image_detail_is_adapted_without_mutating_fallback_input(tmp_path, monkeypatch):
+    monkeypatch.setattr(os, "environ", {"GROQ_API_KEY": "test-secret", "DEEPSEEK_API_KEY": "paid-key"})
+    calls = fake_curl(monkeypatch, status=400)
+    client = provider.DeepSeekClient(provider.DeepSeekSettings.from_env(tmp_path))
+    messages = [{"role": "user", "content": [
+        {"type": "text", "text": "OCR JSON"},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc", "detail": "original"}},
+        {"type": "image_url", "image_url": {"url": "https://example.test/image", "detail": "low"}},
+    ]}]
+    original = json.loads(json.dumps(messages))
+    paid_payloads = []
+
+    class PaidAdapter(requests.adapters.BaseAdapter):
+        def send(self, request, **kwargs):
+            paid_payloads.append(json.loads(request.body))
+            response = requests.Response()
+            response.status_code = 200
+            response._content = b'{"choices":[{"finish_reason":"stop","message":{"content":"{}"}}]}'
+            return response
+        def close(self):
+            pass
+
+    client.session.mount("https://api.deepseek.com/", PaidAdapter())
+    try:
+        client.request_json(messages, stage="ocr", debug_dir=tmp_path / "debug")
+    finally:
+        client.close()
+    sent = json.loads(calls[0][2]["data-binary"])["messages"]
+    assert sent[0]["content"][1]["image_url"]["detail"] == "high"
+    assert sent[0]["content"][2] == original[0]["content"][2]
+    assert messages == original == paid_payloads[0]["messages"]
+    identity = client.settings.identity("ocr")["free_providers"][0]
+    assert identity["image_detail"] == "high"
+    assert "image_detail" not in client.settings.identity("classification")["free_providers"][0]
+
+
+def test_groq_oversize_tpm_preserves_diagnostics_and_falls_back(tmp_path, monkeypatch):
+    monkeypatch.setattr(os, "environ", {"GROQ_API_KEY": "test-secret", "OPENROUTER_API_KEY": "free-key"})
+    error = {"error": {"message": "TPM: Limit 8000, Requested 25790 test-secret",
+                       "type": "tokens", "code": "rate_limit_exceeded", "private": "omit"}}
+    calls = fake_curl(monkeypatch, status=413, response_factory=lambda payload: error)
+    client = provider.DeepSeekClient(provider.DeepSeekSettings.from_env(tmp_path))
+    # Exercise the same adapter path, including header parsing, with no network.
+    original_run = curl_transport.subprocess.run
+    def run(*args, **kwargs):
+        result = original_run(*args, **kwargs)
+        path = Path(calls[-1][2]["dump-header"])
+        with path.open('a') as stream:
+            stream.write('x-ratelimit-limit-tokens: 8000\n'
+                         'x-ratelimit-remaining-tokens: 8000\n'
+                         'x-ratelimit-reset-tokens: 1ms\n'
+                         'Set-Cookie: private\n')
+        return result
+    monkeypatch.setattr(curl_transport.subprocess, "run", run)
+    class FreeAdapter(requests.adapters.BaseAdapter):
+        def send(self, request, **kwargs):
+            response = requests.Response()
+            response.status_code = 200
+            response._content = b'{"choices":[{"finish_reason":"stop","message":{"content":"{}"}}]}'
+            return response
+        def close(self):
+            pass
+    client.session.mount("https://openrouter.ai/", FreeAdapter())
+    try:
+        result = client.request_json([], stage="classification", debug_dir=tmp_path / "debug")
+    finally:
+        client.close()
+    assert result.provenance["provider"] == "openrouter"
+    assert len(calls) == 1 and client.counter.total == 2
+    attempt = client.attempts[0]
+    assert attempt["api_error"]["code"] == "rate_limit_exceeded"
+    assert set(attempt["api_error"]) == {"message", "type", "code"}
+    assert attempt["rate_limit_headers"]["x-ratelimit-limit-tokens"] == "8000"
+    assert attempt["rate_limit_headers"]["retry-after"] == "37"
+    assert "set-cookie" not in attempt["rate_limit_headers"]
+    assert "Requested 25790" in client.provider_diagnostics[2]["reason"]
+    assert "test-secret" not in json.dumps(client.attempts + client.provider_diagnostics)
